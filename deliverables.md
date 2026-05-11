@@ -10,7 +10,7 @@ A simple list of the 20 things the SalesGeek Scotland event companion app will d
 
 4. **Email OTP login** — passwordless attendee identity using email as the key, with OTP for prize eligibility.
 
-5. **Auto check-in** — first event-day entry checks the attendee in automatically; staff can override.
+5. **Auto check-in** — first event-day entry checks the attendee in automatically; staff can override.   
 
 6. **Profile QR** — every attendee has their own QR so staff can identify them fast at the desk.
 
