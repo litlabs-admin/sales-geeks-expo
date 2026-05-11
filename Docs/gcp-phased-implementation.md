@@ -1,9 +1,11 @@
 # SalesGeek Scotland — Phased Implementation Plan
 ## Scottish Growth Expo 2026 — Event Companion Web App
 
-> **Stack.** Frontend on **Vercel** (Next.js), backend on **GCP** (Cloud Run), data + auth on **Supabase** (Postgres + Supabase Auth + Storage), email on **Resend**, cache/idempotency on **Upstash Redis**. We work against a real Supabase project from day one — no local Supabase CLI, no local Postgres.
+> **Stance.** Build and run the entire app **locally** until every phase test gate is green. The only services that are real from day one are **Supabase** (data + auth) and **Resend** (email) — both used straight against their cloud APIs. Vercel and GCP do not exist yet during the build; they appear only in the final deployment phase.
 
-> **SQL workflow.** Every phase ships a SQL migration file in `supabase/sql/`. You paste it into the **Supabase Dashboard → SQL Editor** when you start that phase. The folder is built up phase by phase during the build itself — we are not pre-writing all migrations.
+> **Why this hybrid?** Data and email are the two things you cannot mock convincingly. By using real Supabase and real Resend from day one we get genuine OTP delivery, real RLS behavior, real Realtime, and zero parity drift. Everything else (frontend, backend, Redis) runs on your laptop where iteration is instant.
+
+> **SQL workflow.** Every phase that touches the database ships one SQL file in `supabase/sql/`. You paste it into **Supabase Dashboard → SQL Editor → Run**. The folder is built up phase by phase as we go — we are not pre-writing all migrations.
 
 > **Sources of truth for scope:** [northstar.md](../northstar.md), [docs/read.md](../read.md), [deliverables.md](../deliverables.md).
 
@@ -11,255 +13,268 @@
 
 ## How this document is organized
 
-1. **Part 1 — Architecture.** The three-tier split (Vercel + GCP + Supabase) and how the pieces talk.
-2. **Part 2 — Accounts & one-time setup.** Supabase, Vercel, GCP, Resend, Upstash, Cloudflare. Walked through in order.
-3. **Part 3 — Email (Resend).** Production sending domain, DNS (SPF/DKIM/DMARC), and how Resend powers Supabase Auth emails.
+1. **Part 1 — Architecture.** What runs where during local development, and what production will look like after Phase 10.
+2. **Part 2 — Accounts & local setup.** Supabase + Resend cloud accounts, Cloudflare for email DNS, plus the laptop tools (Node, pnpm, Docker for local Redis).
+3. **Part 3 — Email (Resend).** Production sending domain, DNS (SPF/DKIM/DMARC), and how Resend powers Supabase Auth emails. Real emails from day one.
 4. **Part 4 — Auth (Supabase Auth).** Email OTP, 24-hour session, anonymous sign-in for the pre-OTP app entry flow.
 5. **Part 5 — Notifications.** In-app + Realtime + email — the full three-layer system.
 6. **Part 6 — The SQL folder.** Convention for `supabase/sql/` and how phases use it.
-7. **Part 7 — The phased build.** Phases 0 through 9. Each phase has:
+7. **Part 7 — The phased build (local).** Phases 0 through 9. Every phase has:
    - **What we're building** (plain English)
    - **SQL to paste** (file in `supabase/sql/`)
-   - **Frontend (Vercel) changes**
-   - **Backend (GCP) changes**
+   - **Frontend changes** (`apps/web` — Next.js dev server)
+   - **Backend changes** (`apps/backend` — Hono running locally)
    - **Scripts to create**
-   - **How to test it**
+   - **How to test it** (all local commands)
    - **Test gate**
    - **Non-negotiables**
-8. **Part 8 — Production cutover.** Promoting dev → prod Supabase, prod GCP, prod Vercel.
+8. **Part 8 — Deployment (Phase 10).** Only after Phase 9 is green. Vercel for the frontend, GCP Cloud Run for the backend, Upstash for production Redis, prod Supabase project, prod Resend domain.
 
 ---
 
 # Part 1 — Architecture
 
-## 1.1 The three-tier split
+## 1.1 During local development (Phases 0–9)
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  Your laptop                                                     │
+│                                                                  │
+│   pnpm dev:web      (Next.js dev server  → http://localhost:3000)│
+│   pnpm dev:backend  (Hono server         → http://localhost:8080)│
+│                                                                  │
+│   ┌────────────────────────────────────────────────────────────┐ │
+│   │  Docker Compose (we own this — just Redis)                 │ │
+│   │   - redis           :6379   (cache, rate limit, queue)     │ │
+│   └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+└──────────────────────────────────┬───────────────────────────────┘
+                                   │ HTTPS (only data + email leave the laptop)
+                                   ▼
+              ┌────────────────────────────────────────────┐
+              │             Supabase Cloud (dev project)   │
+              │  - Postgres 15                             │
+              │  - Supabase Auth (Email OTP via Resend)    │
+              │  - Storage (assets, qr-cards, exports)     │
+              │  - Realtime (notification push)            │
+              └────────────────────────────────────────────┘
+              ┌────────────────────────────────────────────┐
+              │             Resend Cloud                   │
+              │  - Sends every email (OTPs, confirmations) │
+              │  - mail.salesgeek.scot sending domain      │
+              └────────────────────────────────────────────┘
+```
+
+**What runs locally:** Next.js frontend, Hono backend, Redis.
+**What runs in the cloud (from day one):** Supabase, Resend.
+**What does NOT exist yet:** Vercel, GCP Cloud Run, Upstash Redis, Cloudflare proxy. Those appear in Phase 10.
+
+## 1.2 After deployment (Phase 10 onward — the production view)
 
 ```
                                 ┌──────────────────────────────┐
                                 │      User (mobile browser)   │
                                 └──────────────┬───────────────┘
-                                               │ HTTPS
+                                               │ HTTPS via Cloudflare
                                                ▼
                               ┌────────────────────────────────┐
                               │           VERCEL               │
-                              │   Next.js 14 (App Router)      │
-                              │   - UI / pages                 │
-                              │   - Public Server Components   │
-                              │   - Middleware (slug guard)    │
-                              │   - Light edge handlers        │
-                              │   - supabase-js (browser)      │
+                              │   Next.js 14 — app.salesgeek   │
                               └────────┬───────────────┬───────┘
                                        │               │
-                       JWT-authed REST │               │ supabase-js
-                       (mutations,     │               │ (auth + safe
-                        scoring, etc.) │               │  reads via RLS,
-                                       │               │  Realtime push)
                                        ▼               ▼
                             ┌────────────────┐    ┌────────────────────┐
-                            │      GCP       │    │     SUPABASE       │
-                            │  Cloud Run     │    │  - Postgres 15     │
-                            │  (backend API) │    │  - Supabase Auth   │
-                            │  + workers     │◄───┤  - Storage         │
-                            │  + cron        │    │  - Realtime        │
-                            │  + webhooks    │    └────────────────────┘
-                            └────┬───────────┘
-                                 │
-                                 ▼
-                            ┌────────────────┐    ┌────────────────────┐
-                            │ Upstash Redis  │    │      Resend        │
-                            │ (idempotency,  │    │  (transactional    │
-                            │  rate limits,  │    │   email + SMTP for │
-                            │  scan locks)   │    │   Supabase Auth)   │
-                            └────────────────┘    └────────────────────┘
+                            │  GCP Cloud Run │    │   Supabase Cloud   │
+                            │  api.salesgeek │    │   (prod project)   │
+                            └────┬───────────┘    └────────────────────┘
+                                 │                          ▲
+                                 ▼                          │
+                            ┌────────────────┐              │
+                            │ Upstash Redis  │              │
+                            └────────────────┘              │
+                                                            │
+                                          ┌─────────────────┘
+                                          │
+                                  ┌───────────────┐
+                                  │    Resend     │
+                                  └───────────────┘
 ```
 
-## 1.2 What lives where, and why
+The shape is the same as local development; we just swap **localhost** for **Vercel + Cloud Run + Upstash**. Same Supabase, same Resend.
 
-| Layer | Platform | What it holds |
-|---|---|---|
-| **Frontend (Vercel)** | Next.js App Router | All UI, attendee + admin + staff routes, middleware, the slug guard, lightweight server components. The browser uses `@supabase/supabase-js` directly for **auth** and for **safe reads** (leaderboard, agenda) that go through Postgres RLS. The browser **never** writes scoring or redemption data — those go to GCP. |
-| **Backend (GCP)** | Cloud Run service | All trusted business logic: scoring engine, redemption, William reconciler, exports, webhooks (Calendly), and the background workers. Validates Supabase JWTs on inbound requests. Connects to Supabase Postgres with the **service-role key** (bypasses RLS). Triggered by **Cloud Scheduler** for cron and **Cloud Tasks** for deferred jobs. |
-| **Data + auth (Supabase)** | Supabase Cloud | Postgres (every row), Supabase Auth (every login), Storage (sponsor logos, QR PNGs, exports), Realtime (push notifications to attendees). |
-| **Email (Resend)** | Resend Cloud | Sends every email: OTPs (via Supabase Auth's SMTP setting), William booking confirmations, export-ready notifications, ops alerts. |
-| **Cache (Upstash Redis)** | Upstash | Scan idempotency keys, rate-limit windows, leaderboard cache, OTP throttling. HTTP API — works from Cloud Run and from Vercel Edge if needed. |
-| **DNS / WAF (Cloudflare)** | Cloudflare | DNS for `salesgeek.scot`, proxied to Vercel and to the GCP backend. SPF/DKIM/DMARC for the email subdomain. |
+## 1.3 What lives where, and why
 
-## 1.3 Why this split (and not all-Vercel or all-Supabase)
+| Layer | Local (Phases 0–9) | Production (Phase 10) | What it holds |
+|---|---|---|---|
+| **Frontend** | `pnpm dev:web` on :3000 | Vercel | All UI; talks to Supabase directly for auth + safe reads, talks to backend for trusted writes |
+| **Backend** | `pnpm dev:backend` on :8080 | GCP Cloud Run | Scoring, redemption, exports, webhooks, workers, cron |
+| **Data + auth** | Supabase Cloud (dev project) | Supabase Cloud (prod project) | Postgres + Auth + Storage + Realtime |
+| **Email** | Resend Cloud (real sends to a test inbox) | Resend Cloud (real sends to real attendees) | OTPs + transactional |
+| **Cache / queue** | Docker Redis on :6379 | Upstash Redis | Idempotency, rate limits, queue |
+| **DNS / TLS** | none needed | Cloudflare in front of Vercel + Cloud Run | — |
 
-- **Vercel is the right home for Next.js.** Edge, ISR, server components, preview deployments — all first-class.
-- **Supabase is the right home for the data plane.** We get Postgres, Auth, Storage, and Realtime as one managed product. No glue.
-- **GCP holds the trusted backend** because (a) we already have credits, (b) the scoring/redemption engine needs durable workers, fixed cron, and webhook endpoints that should not share a function pool with the public site, and (c) Cloud Run handles spiky event-day traffic cheaply.
-- **The browser only ever talks to Vercel and to Supabase.** It never talks to GCP directly except via the Vercel API — Vercel proxies to GCP under the hood. (Optional later optimization: let the browser call GCP directly for scan endpoints. Day-one keeps it simple — Vercel proxies.)
+## 1.4 Why this hybrid, not pure-local
 
-## 1.4 Request paths (concrete)
+- **Supabase Auth + OTP delivery + RLS + Realtime cannot be faithfully mocked.** Running them against Supabase Cloud from day one means the auth flow you build is the auth flow that ships. No "but it worked locally" surprises.
+- **Resend's deliverability behavior is the hardest thing to debug post-launch.** Sending real emails into real inboxes from week one shaves off the 1-hour DNS troubleshooting session on event day.
+- **Everything else** (frontend, backend, Redis) is faster, cheaper, and easier to debug on your laptop. So they stay local.
 
-**Attendee scans a QR:**
+## 1.5 Request paths (concrete, local)
 
-1. Browser opens `https://app.salesgeek.scot/sge-2026/scan/abc?sig=...`.
-2. Vercel route handler validates the HMAC signature locally.
-3. Vercel calls the GCP backend `POST https://api.salesgeek.scot/scan` with the Supabase access token in `Authorization: Bearer`.
-4. GCP validates the JWT against Supabase's JWKS, runs the idempotent scoring transaction against Supabase Postgres (via service-role connection), writes the audit row, returns the result.
-5. Vercel relays the result to the browser.
-6. The browser's open Supabase Realtime channel receives the score update event and animates the new total — no polling.
+**Attendee scans a QR (local dev):**
 
-**Admin sends a broadcast:**
+1. Browser opens `http://localhost:3000/sge-2026/scan/abc?sig=...`.
+2. Next.js dev server's route handler validates the HMAC signature.
+3. Frontend calls the local backend `POST http://localhost:8080/scan` with the Supabase access token.
+4. Local backend validates the JWT (against Supabase's JWT secret), runs the idempotent scoring transaction against **Supabase Cloud Postgres** (via service-role), writes the audit row.
+5. The browser's open **Supabase Realtime** channel (subscribed to Supabase Cloud directly) receives the score update event.
 
-1. Admin posts to `/admin/notifications/new` on Vercel.
-2. Vercel calls GCP `POST /notifications/broadcast`.
-3. GCP creates the `notifications` row and enqueues a Cloud Task that fans out per-attendee `notification_recipients` rows in batches.
-4. Supabase Realtime emits an insert event on each row.
-5. Every attendee's browser, subscribed to its own user's `notification_recipients` channel, receives the message instantly.
+**Admin sends a broadcast (local dev):**
 
-**Calendly webhook (William reward):**
+1. Admin posts to `localhost:3000/admin/notifications/new`.
+2. Frontend calls `localhost:8080/notifications/broadcast`.
+3. Backend creates the `notifications` row in **Supabase Cloud**, then either fans out inline (small audience) or pushes to a local Redis queue that a backend worker drains.
+4. Supabase Realtime emits insert events on the new `notification_recipients` rows.
+5. Every attendee's browser (subscribed to Supabase Cloud Realtime) sees it instantly.
 
-1. Calendly sends `POST https://api.salesgeek.scot/webhooks/calendly/<eventSlug>` directly to GCP.
-2. GCP validates the HMAC, matches the invitee email to an attendee, completes the redemption transaction in Supabase Postgres.
+**Calendly webhook (local dev):**
+
+Calendly cannot reach `localhost`. For the William reward flow we use a tunneling tool (`cloudflared tunnel`, `ngrok`, or `tailscale serve`) to expose `localhost:8080/webhooks/calendly/...` on a temporary public URL during testing. The `scripts/simulate-calendly-webhook.ts` script bypasses the tunnel entirely by posting a signed fake payload directly to the local backend.
 
 ---
 
-# Part 2 — Accounts & one-time setup
+# Part 2 — Accounts & local setup
 
-Do all of these once, in this order. They're independent of the code.
+Two cloud accounts, a small DNS change, and a handful of laptop tools. Do these once before Phase 0.
 
-## 2.1 What you need on your laptop
+## 2.1 Laptop tools
 
 | Tool | Version | Why |
 |---|---|---|
-| Node.js | 20.x LTS | Build and run the Next.js app |
+| Node.js | 20.x LTS | Run Next.js and the backend |
 | pnpm | 9.x | Monorepo package manager |
-| `gcloud` CLI | latest | Deploy to Cloud Run, manage GCP |
+| Docker Desktop or OrbStack | latest | Run local Redis |
 | Git | any recent | Source control |
+| `psql` client | 15.x | Poke Supabase directly when debugging |
 | A code editor | VS Code / Cursor / similar | Day-to-day work |
 
 ```bash
-brew install node@20 gcloud
+brew install node@20 libpq
+brew link --force libpq
 npm install -g pnpm
-gcloud auth login
-gcloud auth application-default login
+brew install --cask orbstack
 ```
 
-**No Docker, no Postgres, no Supabase CLI on your laptop.** The database, auth, and storage all live in Supabase Cloud from day one.
+That's it. **No `gcloud` CLI, no Vercel CLI, no Supabase CLI until Phase 10** — none are needed for local development.
 
-## 2.2 Accounts checklist
+## 2.2 Cloud accounts you need from day one
 
-Create accounts (or get added) on:
-
-| Service | What for | Tier |
+| Service | What for | Free tier covers dev? |
 |---|---|---|
-| **Supabase** (supabase.com) | Postgres + Auth + Storage + Realtime | Free tier for dev, Pro for production |
-| **Vercel** (vercel.com) | Next.js hosting | Hobby for dev, Pro for production |
-| **Google Cloud** (cloud.google.com) | Cloud Run, Scheduler, Tasks, Secret Manager | Existing credits |
-| **Resend** (resend.com) | Transactional email | Free tier covers dev, paid for production volume |
-| **Upstash** (upstash.com) | Redis | Free tier covers dev, pay-as-you-go for prod |
-| **Cloudflare** (cloudflare.com) | DNS for `salesgeek.scot` | Free |
-| **GitHub** | Code | — |
+| **Supabase** (supabase.com) | Postgres + Auth + Storage + Realtime | Yes |
+| **Resend** (resend.com) | Real email delivery (OTPs + transactional) | Yes (3,000 emails/month) |
+| **Cloudflare** (cloudflare.com) | DNS for `salesgeek.scot` so Resend's DKIM/SPF/DMARC work | Yes |
+| **GitHub** | Source control | Yes |
 
-## 2.3 Supabase — create the projects
+The Vercel, GCP, and Upstash accounts only matter in **Phase 10 (Deployment)** — skip them for now.
 
-We use **two Supabase projects** end-to-end:
+## 2.3 Supabase — create one project (the dev project)
 
-- `salesgeek-dev` — what we develop against. Throwaway data. SQL is pasted here first.
-- `salesgeek-prd` — production. Only touched once a phase's SQL has been validated in dev.
-
-For each project:
+We only create the **dev project** during the build. The production Supabase project is set up at deployment time (Phase 10), against the same SQL files we've validated in dev.
 
 1. Sign in to **app.supabase.com** → **New project**.
-2. Name (`salesgeek-dev` or `salesgeek-prd`), generate a database password (save in 1Password), pick region **`eu-west-2` (London)**.
-3. Wait for provisioning. Copy from **Project Settings**:
+2. Name: `salesgeek-dev`. Database password: generate a strong one and save in 1Password. Region: **`eu-west-2` (London)**.
+3. Wait for provisioning (~2 minutes). Then from **Project Settings → API** copy:
    - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
    - **anon public key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - **service_role key** (Settings → API → Project API keys → service_role; reveal) → `SUPABASE_SERVICE_ROLE_KEY`
-     - **Never expose this in the browser.** GCP backend only.
-   - **Database connection string** (Settings → Database → Connection string → URI):
-     - **Session-mode (port 5432)** for migrations and the GCP backend → `DATABASE_URL`
-     - **Transaction-mode pooler (port 6543)** for fast app queries → `DATABASE_POOL_URL`
+   - **service_role key** (Reveal → copy) → `SUPABASE_SERVICE_ROLE_KEY` — **server-only**, never put this in the frontend.
+   - **JWT Secret** → `SUPABASE_JWT_SECRET`
+4. From **Project Settings → Database → Connection string → URI**:
+   - **Session-mode (port 5432)** → `DATABASE_URL` (for the backend)
+   - **Transaction-mode pooler (port 6543)** → `DATABASE_POOL_URL` (for hot read paths)
 
-We will paste SQL into this project via **Dashboard → SQL Editor** during each phase — see Part 6.
+SQL gets pasted into **Dashboard → SQL Editor** during each phase — see Part 6.
 
-(The full Supabase Auth configuration — Resend SMTP, 24h session, anonymous sign-in — is covered in Part 4 once Resend is set up.)
+The detailed Supabase Auth configuration (Resend SMTP, 24h session, anonymous sign-in) is in Part 4.
 
 ## 2.4 Resend — sign up and start domain verification
 
-We need DNS records to propagate before email works. Start this early.
+Real emails from day one means real DNS records. Start this early because DNS propagation takes time.
 
 1. Sign up at **resend.com**.
-2. **Domains → Add domain.** Use a subdomain so the apex stays free for other services: `mail.salesgeek.scot`.
-3. Resend shows three DNS records (SPF, DKIM, DMARC). Keep this tab open — you'll add the records to Cloudflare in §2.7.
+2. **Domains → Add domain.** Use `mail.salesgeek.scot` (a subdomain so the apex stays clean).
+3. Resend shows three DNS records (SPF, DKIM, DMARC). Add them to Cloudflare (§2.5).
+4. Once verified, **API Keys → Create API key**. Scope it to "Sending access only". Save as `RESEND_API_KEY`.
+5. Add a **test inbox** like `engineering+sgexpo@litlabs.io` — we'll send development OTPs to this.
 
 Full details in Part 3.
 
-## 2.5 Upstash Redis — create the database
+## 2.5 Cloudflare — DNS
 
-1. Sign in to **upstash.com** → **Redis → Create Database**.
-2. Name: `salesgeek-dev-redis`. Region: **eu-west-2**. TLS: on.
-3. Copy from the database page:
-   - **REST URL** → `UPSTASH_REDIS_REST_URL`
-   - **REST Token** → `UPSTASH_REDIS_REST_TOKEN`
-
-Repeat for `salesgeek-prd-redis` when you're ready to launch.
-
-## 2.6 GCP — create the projects
-
-```bash
-gcloud projects create salesgeek-dev --name="SalesGeek Dev"
-gcloud projects create salesgeek-prd --name="SalesGeek Prod"
-# link billing to use credits
-gcloud billing projects link salesgeek-dev --billing-account=<ID>
-gcloud billing projects link salesgeek-prd --billing-account=<ID>
-```
-
-Enable the APIs we'll need (for each project):
-
-```bash
-gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  cloudscheduler.googleapis.com \
-  cloudtasks.googleapis.com \
-  secretmanager.googleapis.com \
-  artifactregistry.googleapis.com \
-  --project=salesgeek-dev
-```
-
-The actual Cloud Run deploy happens in Phase 0 — for now we just need the project ready.
-
-## 2.7 Cloudflare — DNS
-
-In Cloudflare, for `salesgeek.scot`:
+In Cloudflare, for `salesgeek.scot`, add only the **three Resend records** for now:
 
 | Record | Type | Value | Purpose |
 |---|---|---|---|
-| `app` | CNAME | `cname.vercel-dns.com` | Vercel — frontend |
-| `api` | CNAME | (Cloud Run URL, set after Phase 0 deploy) | GCP backend |
-| `mail` (3 records from Resend) | TXT / MX / CNAME | (from Resend dashboard) | Email SPF/DKIM/DMARC |
+| `send.mail` | TXT | (from Resend) | SPF |
+| `resend._domainkey.mail` | CNAME | (from Resend) | DKIM |
+| `_dmarc.mail` | TXT | (from Resend) | DMARC |
 
-For `staging.salesgeek.scot` we do the same with the staging Supabase/Vercel/GCP projects (when we're ready — early phases can run on the dev project alone).
+The `app` and `api` CNAMEs only get added in Phase 10 when we have Vercel/GCP targets to point at.
 
-## 2.8 Environment variables you'll need
+## 2.6 Local environment variables
 
-These end up in three places: your laptop's `.env.local`, Vercel's environment variables (dev + preview + prod), and GCP Secret Manager (backend only).
+Create `.env.local` at the repo root. This is the only env file we use during development.
 
 ```env
-# Public (browser-safe) — Vercel only
-NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-NEXT_PUBLIC_BACKEND_URL=https://api.salesgeek.scot
+# --- Frontend (browser-safe, prefixed NEXT_PUBLIC_) ---
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<from Supabase dashboard>
+NEXT_PUBLIC_BACKEND_URL=http://localhost:8080   # local backend
 
-# Server-only — Vercel server runtime + GCP backend
-SUPABASE_SERVICE_ROLE_KEY=...
-SUPABASE_JWT_SECRET=...                  # for backend JWT validation
-DATABASE_URL=postgresql://...:5432/...   # session mode (migrations + backend)
-DATABASE_POOL_URL=postgresql://...:6543/... # transaction pooler (hot reads)
-UPSTASH_REDIS_REST_URL=...
-UPSTASH_REDIS_REST_TOKEN=...
-RESEND_API_KEY=...
+# --- Backend / server-only ---
+SUPABASE_SERVICE_ROLE_KEY=<from Supabase dashboard>
+SUPABASE_JWT_SECRET=<from Supabase dashboard>
+DATABASE_URL=postgresql://postgres:<pw>@<project>.supabase.co:5432/postgres
+DATABASE_POOL_URL=postgresql://postgres:<pw>@<project>.pooler.supabase.co:6543/postgres
+REDIS_URL=redis://localhost:6379                # local Docker Redis
+
+# --- Email ---
+RESEND_API_KEY=<from Resend>
 EMAIL_FROM="SalesGeek Scotland <noreply@mail.salesgeek.scot>"
-QR_SIGNING_SECRET=<32 random bytes>
-CALENDLY_WEBHOOK_SECRET=...
-BACKEND_SHARED_SECRET=<32 random bytes>   # Vercel ↔ GCP HMAC for non-user calls
+DEV_TEST_INBOX=engineering+sgexpo@litlabs.io    # where OTPs go in dev scripts
+
+# --- App secrets (generate with `openssl rand -hex 32`) ---
+QR_SIGNING_SECRET=<32 random bytes hex>
+CALENDLY_WEBHOOK_SECRET=<32 random bytes hex>
+BACKEND_SHARED_SECRET=<32 random bytes hex>     # used between frontend/backend for non-user calls
 ```
 
-Secrets in GCP go through Secret Manager; secrets in Vercel go through the Environment Variables UI. Never check any of these into git.
+`.env.local` is gitignored. Commit `.env.example` with placeholder values so a fresh clone knows what to fill in.
+
+## 2.7 Bring up the local stack
+
+```bash
+git clone <repo-url> sales-geek-expo
+cd sales-geek-expo
+pnpm install
+
+# Local Redis
+docker compose -f infra/docker/docker-compose.yml up -d
+
+# Paste 0000_extensions.sql and 0001_phase0_foundation.sql
+# into Supabase Dashboard → SQL Editor (one time, see Phase 0)
+
+# Seed
+pnpm db:seed
+
+# Run both apps locally
+pnpm dev:backend &
+pnpm dev:web &
+
+open http://localhost:3000/sge-2026
+```
+
+If frontend loads at `localhost:3000`, backend responds at `localhost:8080/health`, and Supabase auth works against the cloud dev project, you're ready for Phase 0's test gate.
 
 ---
 
@@ -313,9 +328,9 @@ In Supabase: **Authentication → Email Templates**. We customize:
 
 Templates use Handlebars-style tokens like `{{ .Token }}` and `{{ .SiteURL }}`. Keep them mobile-friendly and short.
 
-## 3.5 Transactional email beyond auth (GCP backend → Resend)
+## 3.5 Transactional email beyond auth (backend → Resend)
 
-The GCP backend sends a few non-auth emails:
+The backend sends a few non-auth emails (in local dev, the same Resend API key sends real emails to the test inbox; in production, to real attendees):
 
 | Trigger | Email |
 |---|---|
@@ -356,8 +371,8 @@ What this gives us: the access token rotates every hour silently in the backgrou
 
 **Authentication → URL Configuration:**
 
-- Site URL: `https://app.salesgeek.scot` (and the dev/preview equivalents).
-- Redirect allow-list: production + Vercel preview domains.
+- Site URL: `http://localhost:3000` during the local build; updated to `https://app.salesgeek.scot` at Phase 10.
+- Redirect allow-list (local build): `http://localhost:3000/**` plus any tunnel URL you use for mobile testing (e.g. a `*.trycloudflare.com` URL).
 
 **Authentication → Providers → Anonymous sign-ins:** **enable.** We use this for the pre-OTP "enter the app before verifying" flow (Phase 2).
 
@@ -377,9 +392,9 @@ What "verified" means for prize eligibility: an `attendees.is_verified` flag is 
 
 Same `signInWithOtp` flow with **magic link** instead of code. Their `public.users.type` is `admin` or `staff` — set by an admin via the backend, not derivable from auth.
 
-## 4.4 Validating Supabase JWTs in the GCP backend
+## 4.4 Validating Supabase JWTs in the backend
 
-The GCP backend receives `Authorization: Bearer <access_token>` on every Vercel-proxied request. It validates the JWT using **`SUPABASE_JWT_SECRET`** (from Supabase Dashboard → Settings → API → JWT Secret). On valid, it extracts `sub` (the auth user id), looks up `public.users` by `auth_user_id`, and attaches role + attendee record to the request context.
+The backend (local Hono during the build, Cloud Run after Phase 10) receives `Authorization: Bearer <access_token>` on every frontend-proxied request. It validates the JWT using **`SUPABASE_JWT_SECRET`** (from Supabase Dashboard → Settings → API → JWT Secret). On valid, it extracts `sub` (the auth user id), looks up `public.users` by `auth_user_id`, and attaches role + attendee record to the request context.
 
 ```ts
 // Sketch of the middleware in apps/backend/src/middleware/auth.ts
@@ -399,7 +414,7 @@ Three layers. All shipped together in Phase 7.
 
 - Table `notifications` (the broadcast): title, body, audience filter, scheduled_at, created_by.
 - Table `notification_recipients` (one row per attendee per notification): delivered_at, read_at.
-- Admin creates a broadcast → GCP backend creates the `notifications` row → enqueues a Cloud Task that fans out per-attendee `notification_recipients` rows in batches of 500.
+- Admin creates a broadcast → backend creates the `notifications` row → enqueues a fan-out job (local Redis queue during the build; Cloud Tasks after Phase 10) that writes per-attendee `notification_recipients` rows in batches of 500.
 
 ## 5.2 Realtime push (delivery, no polling)
 
@@ -420,12 +435,12 @@ Three layers. All shipped together in Phase 7.
 
 - Admin's broadcast form has a checkbox: "**Also send by email**".
 - If on, the fan-out task batches Resend `batch.send` calls (Resend supports up to 100 recipients per call).
-- Delivery status comes back via Resend's webhook into the GCP backend and is recorded on `notification_recipients`.
+- Delivery status comes back via Resend's webhook into the backend and is recorded on `notification_recipients`. (Locally, point the Resend webhook at a `cloudflared tunnel` URL for the duration of the test.)
 
 ## 5.4 Scheduled broadcasts
 
 - Set `scheduled_at` in the future. The row sits in `notifications` until due.
-- **Cloud Scheduler** fires the GCP backend `POST /jobs/notifications-due` every minute. The job picks up any rows where `scheduled_at <= now()` and not yet dispatched, then fans them out exactly like an immediate broadcast.
+- During the local build, a simple `setInterval` inside `apps/backend` fires `POST /jobs/notifications-due` every 60 seconds. In Phase 10 we replace it with **Cloud Scheduler** without any code changes — same endpoint, different invoker.
 
 ## 5.5 William reconciliation (related background system)
 
@@ -462,7 +477,7 @@ Each SQL file must be:
 
 - **Idempotent.** Use `create table if not exists`, `create index if not exists`, `do $$ ... exception when duplicate_object then null; end $$;` for enums. Running the same file twice is safe.
 - **Self-contained.** Includes table DDL, indexes, constraints, RLS enable, and any triggers introduced in that phase.
-- **RLS-on by default.** Every table has Row Level Security enabled with **no default policies** — only the `service_role` (used by GCP backend) can read/write. Where we need browser-direct reads (leaderboard, agenda, events_public), we add **explicit select policies** for the `anon` and `authenticated` roles in the same file.
+- **RLS-on by default.** Every table has Row Level Security enabled with **no default policies** — only the `service_role` (used by the backend) can read/write. Where we need browser-direct reads (leaderboard, agenda, events_public), we add **explicit select policies** for the `anon` and `authenticated` roles in the same file.
 
 ## 6.2 How to apply a phase's SQL
 
@@ -473,9 +488,9 @@ Each SQL file must be:
 
 ## 6.3 Types in the app
 
-The frontend (Vercel) uses `@supabase/supabase-js` typed via **`supabase gen types typescript`** run **once per phase** against the dev project — but you can also generate via the Dashboard's "Generate types" button. No CLI is strictly required. Generated types live in `packages/contracts/db-types.ts`.
+The frontend uses `@supabase/supabase-js` typed via Supabase Dashboard's **"Generate types"** button (Dashboard → API). Copy the output into `packages/contracts/db-types.ts` once per phase. No CLI required.
 
-The GCP backend uses **Drizzle ORM** with hand-written TypeScript schema definitions in `apps/backend/src/db/schema.ts`. Drizzle stays the source of typed-query truth on the backend; the SQL files in `supabase/sql/` stay the source of schema truth in Postgres. We keep them in sync by treating SQL as canonical and updating Drizzle to match each phase.
+The backend uses **Drizzle ORM** with hand-written TypeScript schema definitions in `apps/backend/src/db/schema.ts`. Drizzle stays the source of typed-query truth on the backend; the SQL files in `supabase/sql/` stay the source of schema truth in Postgres. We keep them in sync by treating SQL as canonical and updating Drizzle to match each phase.
 
 ---
 
@@ -492,48 +507,51 @@ The GCP backend uses **Drizzle ORM** with hand-written TypeScript schema definit
 ## Phase 0 — Foundation (Day 1, 12 May)
 
 ### What we're building
-The empty house. A monorepo that boots, a Vercel project linked to GitHub, a GCP Cloud Run backend that responds on `/health`, and a Supabase project holding the first tables. End-to-end across all three platforms before any feature lands.
+The empty house, running on your laptop. A monorepo that boots, a local Next.js dev server, a local Hono backend, and a dev Supabase project holding the first three tables. No deploys yet.
 
 ### SQL to paste
 Write `supabase/sql/0000_extensions.sql` (enables `pgcrypto`, `uuid-ossp`, `pg_trgm`, `btree_gin`) and `supabase/sql/0001_phase0_foundation.sql` (creates `events`, `users`, `audit_logs`, with RLS on and an auto-sync trigger from `auth.users → public.users`). Paste both into Supabase Dashboard → SQL Editor → Run, against the **dev** project.
 
 ### Files & repo layout
-- `apps/web/` — Next.js 14 App Router (deployed to Vercel)
-- `apps/backend/` — Hono server on Cloud Run (GCP backend)
-- `apps/backend/Dockerfile` — multi-stage Node 20 build
+- `apps/web/` — Next.js 14 App Router (runs locally via `pnpm dev:web`)
+- `apps/backend/` — Hono server (runs locally via `pnpm dev:backend`)
 - `packages/domain/` — pure domain logic, imported by `apps/backend`
 - `packages/contracts/` — Zod schemas + generated Supabase types
 - `supabase/sql/` — pasted-in SQL migrations (start populating in this phase)
-- `.env.example` — every env var the app/backend needs
-- `infra/gcp/` — Terraform or gcloud scripts for Cloud Run, Scheduler, Tasks
+- `infra/docker/docker-compose.yml` — just Redis on port 6379
+- `.env.local` — every env var the app/backend needs (gitignored)
+- `.env.example` — committed template
 
 ### How to build it (step-by-step)
 
 1. **Scaffold the monorepo.** pnpm workspaces + Turborepo. Root `pnpm-workspace.yaml` lists `apps/*` and `packages/*`.
-2. **Create the Next.js app.** `pnpm create next-app@14 apps/web --typescript --app --tailwind --eslint`. Strip the demo content. Add `@supabase/supabase-js` and a `lib/supabase-browser.ts` helper that creates the client with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-3. **Create the backend.** `apps/backend/` is a small **Hono** server (lightweight Express alternative, great on Cloud Run). Routes: `GET /health`, plus a JWT validation middleware that decodes the Supabase access token using `SUPABASE_JWT_SECRET`. Connect to Postgres via **Drizzle ORM** using `DATABASE_URL` (session-mode connection).
-4. **Paste the SQL.** Open the dev Supabase project's SQL Editor and run `0000_extensions.sql` then `0001_phase0_foundation.sql`. Verify tables exist via **Table Editor**.
-5. **Generate types.** In Supabase Dashboard → API → "Generate types" → TypeScript. Save the output to `packages/contracts/db-types.ts`. (No CLI required — the dashboard gives you a copy-pasteable file.)
-6. **Wire the Drizzle schema.** In `apps/backend/src/db/schema.ts`, write Drizzle table definitions matching the SQL you pasted. This is hand-maintained; the SQL stays canonical.
-7. **Implement the audit pattern.** `packages/domain/audit.ts` exports `withAudit(tx, actor, action, target, reason, fn)` — wraps a Drizzle transaction, runs `fn`, then inserts an `audit_logs` row in the same transaction. Every later mutation uses this.
-8. **RBAC.** `packages/domain/rbac.ts` exports `canDoAction(actor, action, resource)`. A backend middleware `requireRole(...roles)` runs after JWT validation.
-9. **Deploy backend to Cloud Run.** First deploy from local: `gcloud builds submit --tag europe-west2-docker.pkg.dev/salesgeek-dev/svc/backend:v0 ./apps/backend`, then `gcloud run deploy backend --image ... --region europe-west2 --allow-unauthenticated=false`. Bind secrets from Secret Manager. Note the service URL — point Cloudflare `api.salesgeek.scot` at it.
-10. **Deploy Vercel frontend.** Connect repo on Vercel, set environment variables (Part 2.8), trigger first deploy. Vercel handles the `app.salesgeek.scot` DNS.
-11. **CI.** `.github/workflows/ci.yml` runs `pnpm typecheck && pnpm lint && pnpm test`. Vercel and Cloud Build do the deploys on merge.
+2. **Create the Next.js app.** `pnpm create next-app@14 apps/web --typescript --app --tailwind --eslint`. Strip the demo content. Add `@supabase/supabase-js` and `@supabase/ssr`, then create `lib/supabase-browser.ts` (anon-key client for the browser) and `lib/supabase-server.ts` (server-side client that reads the session cookie).
+3. **Create the backend.** `apps/backend/` is a small **Hono** server. Routes: `GET /health`, plus a JWT validation middleware that decodes the Supabase access token using `SUPABASE_JWT_SECRET`. Connect to Postgres via **Drizzle ORM** using `DATABASE_URL`.
+4. **Local Redis.** Add `infra/docker/docker-compose.yml` with a single `redis:7-alpine` service on `:6379`. Use `ioredis` from the backend.
+5. **Paste the SQL.** Open the dev Supabase project's SQL Editor and run `0000_extensions.sql` then `0001_phase0_foundation.sql`. Verify tables exist via **Table Editor**.
+6. **Generate types.** In Supabase Dashboard → API → "Generate types" → TypeScript. Save the output to `packages/contracts/db-types.ts`. (No CLI required — the dashboard gives you a copy-pasteable file.)
+7. **Wire the Drizzle schema.** In `apps/backend/src/db/schema.ts`, write Drizzle table definitions matching the SQL you pasted. SQL stays canonical; Drizzle stays in sync by hand.
+8. **Implement the audit pattern.** `packages/domain/audit.ts` exports `withAudit(tx, actor, action, target, reason, fn)` — wraps a Drizzle transaction, runs `fn`, then inserts an `audit_logs` row in the same transaction. Every later mutation uses this.
+9. **RBAC.** `packages/domain/rbac.ts` exports `canDoAction(actor, action, resource)`. A backend middleware `requireRole(...roles)` runs after JWT validation.
+10. **Run everything locally.**
+    - Terminal 1: `docker compose -f infra/docker/docker-compose.yml up -d` (Redis)
+    - Terminal 2: `pnpm dev:backend` (Hono on `:8080`)
+    - Terminal 3: `pnpm dev:web` (Next.js on `:3000`)
+11. **CI.** `.github/workflows/ci.yml` runs `pnpm typecheck && pnpm lint && pnpm test` on every PR. CI does not deploy anything — it just keeps the repo green.
 
 ### Health check end-to-end
-- `https://app.salesgeek.scot/health` — Vercel responds OK.
-- `https://api.salesgeek.scot/health` — Cloud Run responds OK (returns Git SHA + Postgres reachability bool).
-- Frontend `lib/supabase-browser.ts` can `select` from `events_public` (empty array, but no auth error).
+- `http://localhost:3000/health` — Next.js responds OK.
+- `http://localhost:8080/health` — backend responds OK, including a `db_reachable: true` flag from a `select 1` against the dev Supabase Postgres.
+- Frontend `lib/supabase-browser.ts` can `select` from `events_public` (empty array, but no auth error — proves RLS + anon key are configured).
 
 ### Scripts to create
 
-1. **[scripts/db-truncate.ts](../scripts/db-truncate.ts)** — for the dev Supabase project only: connects via `DATABASE_URL`, truncates every app table (except `auth.*`), resets sequences. Used before re-seeding. Refuses to run if the project URL contains `prd`.
-2. **[scripts/seed-base.ts](../scripts/seed-base.ts)** — connects to dev Supabase via service-role, inserts one event (`sge-2026`), one admin user, one staff user. Idempotent (uses `on conflict do nothing`).
-3. **[scripts/smoke.ts](../scripts/smoke.ts)** — pings both `app.salesgeek.scot/health` and `api.salesgeek.scot/health`, asserts 200, exits 0/1. Takes `--env=dev|prd` flag.
+1. **[scripts/db-truncate.ts](../scripts/db-truncate.ts)** — connects to dev Supabase via `DATABASE_URL`, truncates every app table (except `auth.*`), resets sequences. **Refuses to run** if `SUPABASE_URL` contains `prd` (safety guard for Phase 10).
+2. **[scripts/seed-base.ts](../scripts/seed-base.ts)** — connects to dev Supabase via service-role, inserts one event (`sge-2026`), one admin user, one staff user. Idempotent (`on conflict do nothing`).
+3. **[scripts/smoke.ts](../scripts/smoke.ts)** — pings `http://localhost:3000/health` and `http://localhost:8080/health`, asserts 200, exits 0/1.
 4. **[scripts/test-audit.ts](../scripts/test-audit.ts)** — calls a `withAudit` write through a backend test endpoint, queries `audit_logs`, asserts one row. Also runs the call but forces an exception inside `fn`, asserts no audit row leaked (transactional integrity).
 5. **[scripts/test-rbac.ts](../scripts/test-rbac.ts)** — generates a JWT for a fake staff user, calls an admin-only backend endpoint, asserts 403. Same with an admin JWT — asserts 200.
-6. **[scripts/gen-types.sh](../scripts/gen-types.sh)** — convenience: open Supabase Dashboard's type generator URL for the dev project (saves clicking through). Manual paste into `packages/contracts/db-types.ts`.
+6. **[scripts/gen-types.sh](../scripts/gen-types.sh)** — convenience: opens the Supabase Dashboard type-generator URL for the dev project. You paste the result into `packages/contracts/db-types.ts`.
 
 `package.json`:
 ```json
@@ -542,6 +560,8 @@ Write `supabase/sql/0000_extensions.sql` (enables `pgcrypto`, `uuid-ossp`, `pg_t
   "dev:backend": "pnpm --filter backend dev",
   "test": "vitest run",
   "test:e2e": "playwright test",
+  "redis:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+  "redis:down": "docker compose -f infra/docker/docker-compose.yml down",
   "db:truncate": "tsx scripts/db-truncate.ts",
   "db:seed": "tsx scripts/seed-base.ts",
   "smoke": "tsx scripts/smoke.ts",
@@ -552,35 +572,36 @@ Write `supabase/sql/0000_extensions.sql` (enables `pgcrypto`, `uuid-ossp`, `pg_t
 
 ### How to test it
 ```bash
-# 1. Paste 0000 + 0001 SQL into dev Supabase project.
-# 2. Locally:
+# 1. Paste 0000 + 0001 SQL into the dev Supabase project (one time).
+# 2. Local stack:
 pnpm install
-pnpm db:truncate    # safe-noop if empty
+pnpm redis:up
+pnpm db:truncate     # safe-noop if empty
 pnpm db:seed
-pnpm dev:backend &  # backend runs locally pointed at dev Supabase
-pnpm dev:web &      # web runs locally pointed at dev Supabase + local backend
+pnpm dev:backend &   # backend on :8080, pointed at dev Supabase
+pnpm dev:web &       # web on :3000, pointed at dev Supabase + local backend
 sleep 5
-pnpm smoke --env=dev
+pnpm smoke
 pnpm test:audit
 pnpm test:rbac
-pnpm test           # vitest unit suite
+pnpm test            # vitest unit suite
 pnpm typecheck
 pnpm lint
 ```
 
 ### Test gate (must all pass to open Phase 1)
 - [ ] `pnpm typecheck && pnpm lint && pnpm test` green
-- [ ] `pnpm smoke --env=dev` returns 0 (both Vercel and Cloud Run healthy)
+- [ ] `pnpm smoke` returns 0 (both `localhost:3000/health` and `localhost:8080/health`)
 - [ ] `pnpm test:audit` returns 0
 - [ ] `pnpm test:rbac` returns 0
-- [ ] `0000_extensions.sql` + `0001_phase0_foundation.sql` applied cleanly in dev Supabase project; tables visible in Table Editor
+- [ ] `0000_extensions.sql` + `0001_phase0_foundation.sql` applied cleanly in dev Supabase; tables visible in Table Editor
 - [ ] Frontend can read `events_public` from the browser (RLS-permitted)
 - [ ] Backend rejects requests without a valid Supabase JWT
 
 ### Non-negotiables
 - No mutation function exists outside `withAudit`. Grep `apps/backend/src` for direct `db.insert`/`db.update` outside the `withAudit` wrapper — there should be none in domain code.
 - The `audit_logs` table is **append-only**. No domain code calls `update` or `delete` on it (also revoked at the SQL level for non-service-role).
-- The `service_role` key never reaches the browser. It's only in GCP Secret Manager and Vercel's server-side env vars.
+- The `service_role` key never reaches the browser. It only lives in `.env.local` (server-side) on your laptop. When we deploy in Phase 10 it moves to GCP Secret Manager and Vercel's server-side env.
 
 ---
 
@@ -659,7 +680,7 @@ Write and paste `supabase/sql/0003_phase2_identity.sql`:
 - `attendees` (event_id, user_id, email, real_name, business_name, phone, alias, is_verified, checked_in_at, competition_score, spendable_balance, reached_current_score_at)
 - `pending_scans` (auth_user_id, qr_code_id, created_at) — survives the anon-to-verified upgrade because `auth_user_id` stays the same
 - Trigger: when `auth.users.is_anonymous` flips from `true` to `false`, set `attendees.is_verified = true` and fire an "identity_verified" audit row
-- RLS: `attendees` has a `select` policy where `auth_user_id = auth.uid()` so each attendee can read **only their own** row from the browser; writes still go through the GCP backend
+- RLS: `attendees` has a `select` policy where `auth_user_id = auth.uid()` so each attendee can read **only their own** row from the browser; writes still go through the backend
 
 ### Supabase Dashboard config (one-time per project)
 This is the actual config — already covered in Part 4, called out again here since it lands in Phase 2:
@@ -717,7 +738,7 @@ pnpm test:presignup
 ```
 
 Manual smoke (do once):
-- Open the deployed dev URL `/sge-2026/join` on your phone.
+- Open `http://localhost:3000/sge-2026/join` (or expose it to your phone via `cloudflared tunnel --url http://localhost:3000`).
 - You're already logged in anonymously — no friction.
 - Enter your real email, request OTP. Email arrives via Resend within seconds.
 - Paste OTP. Now verified.
@@ -1309,34 +1330,243 @@ pnpm uat
 
 ---
 
-# Part 8 — Production cutover
+# Part 8 — Deployment (Phase 10)
 
-Because we develop against real cloud (dev Supabase + dev Vercel + dev GCP) from day one, "going to production" is not a giant migration. It is a controlled **promotion**: same code, same SQL, against the prod set of projects.
+Phase 10 only opens when Phase 9 is green: `pnpm uat` exits 0 on a clean laptop run with every test gate passing. **Do not provision cloud resources before then.**
 
-## 8.1 Production projects to create (once, ahead of cutover)
+The shape is straightforward: we take the same code we have been running locally for two weeks, deploy the frontend to Vercel, deploy the backend to GCP Cloud Run, move Redis from Docker to Upstash, and create a fresh Supabase **prod** project that mirrors the dev one we have been pasting SQL into. Resend stays exactly as-is.
 
-| Service | Dev project | Prod project |
+## Phase 10.1 — Create production accounts (T-3 days)
+
+| Service | What to create | Notes |
 |---|---|---|
-| Supabase | `salesgeek-dev` | `salesgeek-prd` |
-| Vercel | `salesgeek` (Preview + Production envs) | same project, prod branch is `main` |
-| GCP | `salesgeek-dev` | `salesgeek-prd` |
-| Upstash Redis | `salesgeek-dev-redis` | `salesgeek-prd-redis` |
-| Resend | shared, same sending domain (`mail.salesgeek.scot`) | same |
+| Supabase | New project `salesgeek-prd` | Same region (`eu-west-2`), Pro plan for daily backups + PITR |
+| Vercel | Connect repo, create project `salesgeek` | Hobby is fine for the build; switch to Pro the week of the event for password protection on preview deploys |
+| GCP | New project `salesgeek-prd`, enable Cloud Run + Cloud Build + Cloud Scheduler + Cloud Tasks + Secret Manager + Artifact Registry | Link existing credits |
+| Upstash | New Redis DB `salesgeek-prd-redis` | Region `eu-west-2`, TLS on, pay-as-you-go tier |
+| Resend | (already done) — promote sending domain to "verified" in production usage | No new domain needed |
 
-## 8.2 Promotion steps
+### Production env-var inventory
 
-1. **Apply all SQL files to the prod Supabase project** in order (`0000` → `0010`). Verify in Table Editor.
-2. **Configure prod Supabase Auth** exactly as dev: Email OTP, anonymous sign-in enabled, Resend SMTP, 24-hour refresh TTL, redirect allow-list points at `app.salesgeek.scot`.
-3. **Deploy the backend to prod Cloud Run.** Same image tag as the green dev deploy. Bind prod secrets from Secret Manager.
-4. **Point Cloudflare `api.salesgeek.scot`** at the prod Cloud Run URL.
-5. **Promote Vercel to production.** Merge to `main`. Vercel auto-deploys. `app.salesgeek.scot` resolves.
-6. **Smoke test prod.** `pnpm smoke --env=prd`. Run the full Playwright happy-path against prod.
-7. **Seed minimum prod data.** Real event (`sge-2026`), real admin/staff accounts, real businesses, real reward catalog. Done via dashboard-only or `scripts/seed-prod-event.ts` running locally with prod env vars (extreme care: refuses if `--confirm` not passed).
-8. **Pre-event freeze.** No code merges in the 48 hours before event day except incident fixes.
+Same shape as `.env.local`, with these differences:
 
-## 8.3 Day-of operations (separate runbook)
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://<prd-project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<prd anon>
+NEXT_PUBLIC_BACKEND_URL=https://api.salesgeek.scot
+SUPABASE_SERVICE_ROLE_KEY=<prd service-role>
+SUPABASE_JWT_SECRET=<prd JWT secret>
+DATABASE_URL=postgresql://...:5432/postgres        # prd session-mode
+DATABASE_POOL_URL=postgresql://...:6543/postgres   # prd pooler
+REDIS_URL=<from Upstash>                            # rediss:// (TLS)
+UPSTASH_REDIS_REST_URL=<from Upstash>               # for the HTTP client
+UPSTASH_REDIS_REST_TOKEN=<from Upstash>
+RESEND_API_KEY=<from Resend>
+EMAIL_FROM="SalesGeek Scotland <noreply@mail.salesgeek.scot>"
+```
 
-The detailed event-day playbook (T-48h, T-24h, T-2h, T-0, escalation rota) is intentionally out of this doc. It belongs in `Docs/event-day-runbook.md`, written once Phase 9 is green.
+Vercel server-side env, GCP Secret Manager (backend), Upstash and Supabase already hold theirs.
+
+## Phase 10.2 — Apply all SQL to the prod Supabase project (T-3 days)
+
+1. Open the prod Supabase project → SQL Editor.
+2. Paste **every file in `supabase/sql/` in order**, `0000` through the last one, one at a time. Run each, confirm no errors.
+3. Configure prod Auth identically to dev (Part 4):
+   - Email OTP on
+   - Anonymous sign-ins on
+   - JWT expiry 3600, refresh token TTL 86400, rotation on
+   - SMTP set to Resend (same API key, same `noreply@mail.salesgeek.scot` sender)
+   - Site URL: `https://app.salesgeek.scot`
+   - Redirect allow-list: `https://app.salesgeek.scot/**`, plus Vercel preview domain pattern
+4. Open prod Table Editor; confirm structure matches dev.
+5. Generate prod-side types — paste into `packages/contracts/db-types.prd.ts` for spot-check. Should be identical to dev's types.
+
+## Phase 10.3 — Deploy the backend to GCP Cloud Run (T-2 days)
+
+```bash
+# Install gcloud CLI
+brew install --cask google-cloud-sdk
+gcloud auth login
+gcloud config set project salesgeek-prd
+
+# Enable APIs
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  cloudscheduler.googleapis.com \
+  cloudtasks.googleapis.com \
+  secretmanager.googleapis.com \
+  artifactregistry.googleapis.com
+
+# Create Artifact Registry
+gcloud artifacts repositories create salesgeek --repository-format=docker --location=europe-west2
+
+# Push every secret to Secret Manager
+for VAR in SUPABASE_SERVICE_ROLE_KEY SUPABASE_JWT_SECRET DATABASE_URL DATABASE_POOL_URL \
+           REDIS_URL UPSTASH_REDIS_REST_URL UPSTASH_REDIS_REST_TOKEN \
+           RESEND_API_KEY QR_SIGNING_SECRET CALENDLY_WEBHOOK_SECRET BACKEND_SHARED_SECRET; do
+  echo -n "<value>" | gcloud secrets create $VAR --data-file=- --replication-policy=automatic
+done
+
+# Build and push the backend image
+gcloud builds submit --tag europe-west2-docker.pkg.dev/salesgeek-prd/salesgeek/backend:v1 ./apps/backend
+
+# Deploy Cloud Run service
+gcloud run deploy backend \
+  --image europe-west2-docker.pkg.dev/salesgeek-prd/salesgeek/backend:v1 \
+  --region europe-west2 \
+  --service-account=backend-runtime@salesgeek-prd.iam.gserviceaccount.com \
+  --min-instances=2 --max-instances=20 \
+  --cpu=1 --memory=1Gi --concurrency=80 \
+  --update-secrets=SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,\
+SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest,\
+DATABASE_URL=DATABASE_URL:latest,\
+DATABASE_POOL_URL=DATABASE_POOL_URL:latest,\
+REDIS_URL=REDIS_URL:latest,\
+RESEND_API_KEY=RESEND_API_KEY:latest,\
+QR_SIGNING_SECRET=QR_SIGNING_SECRET:latest,\
+CALENDLY_WEBHOOK_SECRET=CALENDLY_WEBHOOK_SECRET:latest,\
+BACKEND_SHARED_SECRET=BACKEND_SHARED_SECRET:latest \
+  --no-allow-unauthenticated
+```
+
+Note the service URL (something like `https://backend-xxxx-ew.a.run.app`). Smoke it: `curl https://backend-xxxx-ew.a.run.app/health` (expect 401 — that's correct, it rejects unauthenticated; bypass with a signed test token).
+
+### Cron jobs
+
+```bash
+# Notifications due-poll — every minute
+gcloud scheduler jobs create http notifications-due \
+  --schedule="* * * * *" --http-method=POST \
+  --uri=https://backend-xxxx-ew.a.run.app/jobs/notifications-due \
+  --oidc-service-account-email=scheduler@salesgeek-prd.iam.gserviceaccount.com
+
+# William reconciler — every 5 minutes
+gcloud scheduler jobs create http william-reconcile \
+  --schedule="*/5 * * * *" --http-method=POST \
+  --uri=https://backend-xxxx-ew.a.run.app/jobs/william-reconcile \
+  --oidc-service-account-email=scheduler@salesgeek-prd.iam.gserviceaccount.com
+
+# Archive transition + reward expiry — daily at 03:00 UTC
+gcloud scheduler jobs create http daily-maintenance \
+  --schedule="0 3 * * *" --http-method=POST \
+  --uri=https://backend-xxxx-ew.a.run.app/jobs/daily-maintenance \
+  --oidc-service-account-email=scheduler@salesgeek-prd.iam.gserviceaccount.com
+```
+
+### Cloud Tasks queues
+
+```bash
+gcloud tasks queues create notifications-fanout --location=europe-west2 --max-dispatches-per-second=50
+gcloud tasks queues create email-retry --location=europe-west2 --max-dispatches-per-second=5
+gcloud tasks queues create exports-heavy --location=europe-west2 --max-dispatches-per-second=2
+```
+
+## Phase 10.4 — Deploy the frontend to Vercel (T-2 days)
+
+1. Connect the GitHub repo on Vercel. Set root directory to `apps/web`. Framework preset: Next.js.
+2. Set environment variables in **Vercel → Settings → Environment Variables**, **for Production scope only** first:
+   - All `NEXT_PUBLIC_*` plus the server-side secrets the Next.js layer needs (`SUPABASE_SERVICE_ROLE_KEY`, `BACKEND_SHARED_SECRET`).
+   - **Do NOT** set `DATABASE_URL` here — Vercel never talks to Postgres directly. All DB writes go via the backend.
+3. Trigger a production build from `main`. Confirm it succeeds.
+4. Bind the custom domain `app.salesgeek.scot`. Vercel will give you a CNAME — add it in Cloudflare (DNS-only, **not** proxied — Vercel manages its own TLS).
+5. Smoke: `curl https://app.salesgeek.scot/health` → 200.
+
+### Cloudflare for the backend
+
+Add a Cloudflare DNS record:
+
+| Record | Type | Value | Proxied? |
+|---|---|---|---|
+| `api` | CNAME | `<cloud-run-url>.a.run.app` | **Yes (proxied)** — enables Cloud Armor-style rules + DDoS at the edge |
+
+In Cloud Run, bind the custom domain `api.salesgeek.scot` via **Cloud Run → Domain Mappings**. Wait for the cert to issue.
+
+## Phase 10.5 — Post-deploy smoke and seed (T-1 day)
+
+```bash
+# From your laptop, with prod env vars in a local file:
+export $(cat .env.production)
+pnpm smoke --target=prod
+pnpm test:e2e --env=prod   # full Playwright suite against prod
+```
+
+Seed real production data via the admin UI on `https://app.salesgeek.scot/admin`:
+
+- Real event row (`sge-2026`, dates, brand tokens)
+- Real admin and staff users
+- Real businesses + their auto-generated QRs
+- Real reward catalog
+- Real agenda, geeks, sponsors
+
+Done via UI rather than a seed script — production seeds being one-off makes a script unnecessary risk.
+
+## Phase 10.6 — Pre-event freeze and the event-day runbook (T-48h to T+0)
+
+48 hours before doors open:
+
+- Code freeze. No merges to `main` except for incident fixes.
+- Take a manual Supabase backup snapshot.
+- Restore-drill the snapshot into a scratch project.
+- Re-verify Resend deliverability to fresh `@gmail`, `@outlook`, `@icloud` inboxes.
+- Tighten Cloud Armor rate limits on `/scan/*` and `/auth/otp` paths.
+- Bump Cloud Run `min-instances` to 4 (web equivalent if applicable) for the warm pool.
+- Confirm on-call rota in `Docs/event-day-runbook.md` (separate document — to be written when Phase 9 closes).
+
+T-2 hours on event day:
+
+- Final smoke suite.
+- Dashboard up on the ops table.
+- Slack/PagerDuty alerts confirmed.
+
+During the event:
+
+- On-call watches dashboards.
+- Any change requires explicit approval from the technical lead.
+- **Feature flag flips are the preferred remediation, not redeploys.**
+
+## Phase 10.7 — Disaster recovery sketch
+
+| Scenario | Mitigation | RTO | RPO |
+|---|---|---|---|
+| Cloud Run region outage | Manual redeploy to `europe-west1` using the same image | 30 min | 0 (DB unaffected) |
+| Supabase outage | Wait + status page; no failover plan v1 (acceptable for one-day event) | per Supabase | per Supabase |
+| Resend outage | Switch SMTP back to Supabase's built-in (degraded delivery, but OTPs still flow) | 10 min | n/a |
+| Upstash outage | App falls back to DB-level idempotency (slower but correct) | n/a | n/a |
+| Vercel outage | Static fallback page on Cloudflare for the public-facing slug | 15 min | n/a |
+| Total data corruption | Point-in-time restore from Supabase PITR | 30 min | 5 min |
+
+## Phase 10.8 — Production readiness checklist
+
+**Infrastructure**
+- [ ] Supabase prd project provisioned, Pro plan, PITR on
+- [ ] All SQL files applied to prd, Table Editor matches dev
+- [ ] Vercel project live, custom domain bound, TLS green
+- [ ] GCP Cloud Run service deployed, custom domain bound, TLS green
+- [ ] Upstash Redis live, TLS, connection tested from Cloud Run
+- [ ] Resend domain verified, SPF/DKIM/DMARC all green in `mxtoolbox`
+- [ ] Cloud Scheduler jobs configured
+- [ ] Cloud Tasks queues configured
+
+**Security**
+- [ ] All secrets in GCP Secret Manager + Vercel Env, none in repo
+- [ ] Service-role key absent from any frontend env var (`NEXT_PUBLIC_*`)
+- [ ] HMAC validation on `/scan/*` and Calendly webhook
+- [ ] RLS enabled on every table, deny-all by default
+- [ ] CORS on backend limited to `app.salesgeek.scot` and Vercel preview pattern
+
+**Platform**
+- [ ] Phase 0–9 gates green on `main`
+- [ ] `pnpm smoke --target=prod` returns 0
+- [ ] Full Playwright suite green against prod
+- [ ] Real-event seed data entered via admin UI
+
+**Operations**
+- [ ] On-call rota published
+- [ ] Event-day runbook exists
+- [ ] Alert routing tested end-to-end
+- [ ] Pre-event freeze active
+- [ ] Backup taken at T-24h
 
 ---
 
@@ -1430,7 +1660,7 @@ Every script is a single-purpose, idempotent, exit-code-driven check. They are h
 
 | Day | Date | Phase | What "done" looks like |
 |---|---|---|---|
-| 1 | Tue 12 May | Phase 0 | Vercel + Cloud Run + dev Supabase all respond on `/health`; SQL `0000` + `0001` applied |
+| 1 | Tue 12 May | Phase 0 | Local frontend + backend + dev Supabase all respond on `/health`; SQL `0000` + `0001` applied |
 | 2 | Wed 13 May | Phase 1 | Slug routing works; lifecycle transitions tested; SQL `0002` applied |
 | 3 | Thu 14 May | Phase 2 | Anon sign-in → OTP via Resend → 24h session round-trip; SQL `0003` applied |
 | 4–6 | Fri–Sun 15–17 May | Phase 3 | Five-tab IA visible, content CRUD works; SQL `0004` applied |
@@ -1448,13 +1678,13 @@ Every script is a single-purpose, idempotent, exit-code-driven check. They are h
 - **Audit row.** A line in the `audit_logs` table that says "this actor did this thing at this time, here's the payload". Never updated, never deleted.
 - **Ledger.** A running balance. We have two: `competition_score` (for the leaderboard) and `spendable_balance` (for redemptions).
 - **HMAC.** A signature using a shared secret. Stops an attacker from making up QR URLs.
-- **RLS (Row Level Security).** Postgres feature that enforces per-row access at the database level. We enable it on every table; the GCP backend uses the service-role key (bypasses RLS), the browser uses the anon/authenticated keys (subject to RLS).
+- **RLS (Row Level Security).** Postgres feature that enforces per-row access at the database level. We enable it on every table; the backend uses the service-role key (bypasses RLS), the browser uses the anon/authenticated keys (subject to RLS).
 - **Anonymous sign-in.** Supabase Auth feature that gives an unverified user a `auth.users` row + JWT immediately. Lets us keep the desk line moving and upgrade to verified on OTP.
 - **Realtime.** Supabase service that streams Postgres row changes to subscribed browsers via WebSocket. We use it to push notifications and score updates without polling.
 - **Resend.** Transactional email provider. Powers both Supabase Auth OTP emails (via SMTP) and our app's non-auth emails (via API).
-- **Service-role key.** Supabase's "god mode" key that bypasses RLS. Only ever lives in GCP Secret Manager and Vercel server-side env vars.
+- **Service-role key.** Supabase's "god mode" key that bypasses RLS. During the build it lives only in your laptop's `.env.local` (server-side). After Phase 10 it moves to GCP Secret Manager and Vercel server-side env. Never goes anywhere near the browser.
 - **k6.** Load testing tool. We run it against the dev cloud stack in Phase 9.
-- **Playwright.** Browser automation. We script real user flows against the deployed dev URL.
+- **Playwright.** Browser automation. We script real user flows against `localhost:3000` during the build; against `app.salesgeek.scot` after Phase 10.
 - **Test gate.** The list of test cases that must pass for the phase to count as "done". No exceptions.
 
 ---
