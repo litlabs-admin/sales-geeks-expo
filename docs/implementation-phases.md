@@ -8,6 +8,32 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - No privileged write path is acceptable without RBAC and audit logging.
 - No event-scoped table/query may operate without explicit `event_id` filters.
 - No scoring or redemption write path may be non-idempotent.
+- Canonical entity model is fixed: `admin`, `staff`, `business`, `attendee`.
+
+## Deliverable Traceability Lock (20/20)
+- The implementation must explicitly deliver all 20 capabilities from `deliverables.md` and preserve one-to-one traceability in phase acceptance.
+- Mandatory capability checklist:
+  1. One event URL with lifecycle modes: pre-event, event-day, post-event archive.
+  2. QR-led desk entry to the app.
+  3. Pre-registration continuity into event-day experience.
+  4. Email OTP passwordless identity with prize-eligibility gating.
+  5. Auto check-in on first event-day entry with staff override.
+  6. Attendee Profile QR for staff identification and desk workflows.
+  7. Home screen with live now, up-next, announcements, points, rank, and progress.
+  8. Agenda with stage/category/type filters and live status.
+  9. Geeks tab with four host SalesGeeks, photo, bio, and contact/calendar links.
+  10. QR game with sponsor/session/hidden-bonus types, auto-award, one-scan-per-attendee.
+  11. Time-released hidden bonus QRs with zone-based hints.
+  12. Personalized sponsor pages with scan state, interest toggle/undo, consent-gated sharing.
+  13. Rewards catalog with self-service/staff-only sections, inventory, limits, and state labels.
+  14. William premium reward completed only via confirmed Calendly booking.
+  15. Anonymous leaderboard: top 10 + own rank, alias-only, visible prize deadline.
+  16. In-app notifications (immediate + scheduled), no browser push in v1.
+  17. Searchable structured FAQs/help editable on event day.
+  18. Admin panel coverage across events, content, QRs, rewards, notifications, branding.
+  19. Live ops dashboard + staff tools (redemption/search/predefined actions) with audit logs.
+  20. Reporting/exports + archive transition with 10-day attendee access.
+  21. Admin CSV exports must always reflect latest available real-time data at export execution time.
 
 ---
 
@@ -19,11 +45,14 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - RBAC primitives (`attendee`, `staff`, `admin`).
 - Shared validation contracts and error model.
 - Audit logger abstraction integrated into mutation service layer.
+- Base business model and export-grade attendee/business detail schema.
 
 ### Implementation Tasks
 - Initialize pnpm + Turborepo workspace and CI workflows.
 - Configure Supabase project bindings and env matrix (`local`, `staging`, `prod`).
 - Create base entities: `events`, `users`, `attendees`, `staff_accounts`, `audit_logs`.
+- Create entity tables for `admins`, `staff`, `businesses`, `attendees`, with event scope and strict foreign keys.
+- Add detailed capture tables for `qr_codes`, `scan_events`, `point_awards`, and audit-linked export metadata fields.
 - Implement migration scripts and rollback verification commands.
 - Introduce service-layer pattern for domain modules and a common transaction wrapper.
 
@@ -32,6 +61,7 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Migration up/down cycle passes on clean database.
 - RBAC test verifies `staff` cannot execute admin-only mutation.
 - Audit test verifies audit row is generated on a protected write.
+- Schema contract test verifies four-entity model and referential integrity constraints.
 
 ### Non-negotiables
 - Do not start feature modules until migration discipline is established.
@@ -72,6 +102,8 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Email OTP verification with pending-access behavior.
 - Duplicate prevention by canonical email.
 - Automatic event-day check-in on first qualified entry.
+- Attendee Profile QR generation and retrieval for staff-facing identification.
+- Seamless attendee login flow with silent session continuity across repeated event-day entries.
 
 ### Implementation Tasks
 - Build prereg/event-day unified registration flow.
@@ -79,12 +111,18 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Implement pending-OTP app access with prize eligibility gating.
 - Persist pre-signup scan context and replay post-registration.
 - Add rate limits for OTP issue/verify endpoints.
+- Implement seamless login pattern:
+  - Event desk QR deep-link includes event slug context.
+  - OTP pending users can continue to non-restricted app areas.
+  - Long-lived event-day session cookie + silent refresh avoids repeat login friction.
 
 ### Test Cases (Completion Criteria)
 - Pre-signup QR scan is preserved and awarded after signup.
 - Duplicate registration by same canonical email maps to existing attendee.
 - OTP brute-force protection test blocks repeated invalid attempts.
 - Session continuity test validates repeated QR scans keep same attendee session.
+- Profile QR test validates attendee QR resolves to the correct attendee profile in staff flow.
+- Re-entry test validates attendee is not forced to re-authenticate during active event-day session.
 
 ### Non-negotiables
 - Email immutability must be enforced at domain layer.
@@ -99,6 +137,10 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Agenda and speaker/Geek/sponsor CRUD in admin.
 - Personalized sponsor page with scan status and interest toggle.
 - Live announcement feed in Home.
+- Home tab includes live now/up-next, announcements, and attendee points/rank/progress blocks.
+- Agenda supports filters by stage, category, and type, with live session status.
+- Geeks tab includes four host SalesGeeks with photo, bio, and contact/calendar links.
+- FAQ/help module is structured, searchable, and editable on event day.
 
 ### Implementation Tasks
 - Build home composition blocks (live now/up-next, announcements, score/rank snapshot).
@@ -112,6 +154,10 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Sponsor interest toggle does not modify score/balance ledgers.
 - Sponsor lead export excludes non-consented attendees.
 - IA test verifies five-tab navigation and secondary pages separation.
+- Agenda filter tests validate stage/category/type filtering behavior.
+- Home tab content test verifies live-now/up-next/announcements and points/rank/progress visibility.
+- Geeks tab test verifies all four host profiles render with required content fields.
+- FAQ/help test verifies search behavior and event-day admin edit propagation.
 
 ### Non-negotiables
 - Five-tab IA must remain consistent.
@@ -126,6 +172,9 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Idempotent scoring engine with transactional ledger writes.
 - Session/reveal/time-window QR constraints.
 - Leaderboard projection with deterministic tie-break logic.
+- Anonymous leaderboard presentation with top 10 + attendee own rank, alias-only display, and visible prize deadline.
+- QR generation engine with idempotent create semantics for both business-owned and staff-misc QRs.
+- Staff-managed miscellaneous QR creation flow (for example guest speakers) with policy-based guardrails.
 
 ### Implementation Tasks
 - Implement QR payload signing + verification.
@@ -133,12 +182,19 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - Add QR type rules (`sponsor`, `session`, `hidden_bonus`, `staff_validated`).
 - Create leaderboard read model sorted by score desc + reached_at asc.
 - Add explicit user messaging states for already-collected/inactive/pre-reveal.
+- Implement QR ownership model:
+  - `owner_type = business | staff_misc`
+  - `owner_id` required for ownership traceability.
+- Implement idempotent QR create endpoint keyed by event + owner + purpose fingerprint.
 
 ### Test Cases (Completion Criteria)
 - Retry-storm test proves no double-credit under repeated identical scan submissions.
 - Hidden bonus scan before reveal returns correct denial reason.
 - Session QR outside active window is rejected.
 - Tie-break test verifies earliest timestamp at same score ranks higher.
+- Leaderboard contract test verifies alias-only public rows, top-10 slice, own-rank inclusion, and deadline visibility.
+- QR generation idempotency test verifies duplicate create requests return the same QR record.
+- Staff QR permission test verifies staff can create only allowed miscellaneous QR categories, not unrestricted admin QR types.
 
 ### Non-negotiables
 - No non-idempotent scoring endpoint may exist.
@@ -201,22 +257,37 @@ Ship a production-ready, multi-event companion platform for Scottish Growth Expo
 - CSV/JSON exports for attendees, leads, leaderboard, scans, rewards, notifications.
 - Archive transition controls and 10-day attendee access enforcement.
 - Admin reopen controls with audit trail.
+- Detailed admin export views for attendee and business datasets with scan, award, and consent lineage.
+- Admin-triggered CSV export jobs that read from current source-of-truth tables/read-models and output latest real-time data snapshot.
 
 ### Implementation Tasks
 - Define export schemas and field dictionary.
 - Implement consent and role-based export filtering.
 - Implement archive window policy based on event end timestamp.
 - Build reopen operations for attendee/event-level access exceptions.
+- Include detailed fields in export contracts for businesses and attendees:
+  - identity/profile state
+  - consent state/history
+  - QR ownership and scan-level outcomes
+  - award/reversal lineage and actor attribution
+- Implement real-time export semantics:
+  - Export endpoint reads latest committed data at request time (no stale cached file reuse).
+  - For heavy exports, run job-based CSV generation with `as_of_timestamp` embedded in file metadata and audit record.
+  - Ensure leaderboard/export read models are refreshed before export finalization if lag threshold is exceeded.
 
 ### Test Cases (Completion Criteria)
 - Archive cutoff test passes at exact boundary timestamp.
 - Reopen action restores access as expected and creates audit entry.
 - Final leaderboard remains attendee-authenticated only in archive mode.
 - Export schema contract tests validate exact field set and ordering.
+- Export completeness tests validate business and attendee detailed fields are populated and queryable by admin.
+- Real-time export test validates a newly committed scan/reward/action is present in CSV generated immediately after the write.
+- Export freshness test validates the `as_of_timestamp` is within acceptable freshness SLA from export trigger time.
 
 ### Non-negotiables
 - Export fields must match published data dictionary exactly.
 - Archive policies must be enforced server-side, never UI-only.
+- Admin CSV export must represent latest real-time data snapshot at execution time.
 
 ---
 

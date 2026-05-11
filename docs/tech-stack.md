@@ -41,6 +41,11 @@
   - `notifications`
   - `reporting`
   - `audit`
+- Primary entity model:
+  - `admin`
+  - `staff`
+  - `business`
+  - `attendee`
 - Domain constraints:
   - Every mutable business record must include `event_id`.
   - Competition score and spendable balance are separate ledgers.
@@ -60,6 +65,15 @@
   - Composite indexes on `(event_id, status)` for high-frequency reads.
   - Ledger indexes on `(attendee_id, created_at)`.
   - Leaderboard projection indexes on `(event_id, score desc, reached_at asc)`.
+  - Scan event indexes on `(event_id, attendee_id, qr_id, scanned_at)` and `(event_id, business_id, scanned_at)`.
+- Export-grade data capture requirements:
+  - `businesses`: legal/display names, tier, industry/category, booth zone, website, contact owner, consent/export metadata, created/updated attribution.
+  - `attendees`: identity fields, verification/check-in timestamps, alias history, acquisition source, consent flags, session/device metadata, archive eligibility timestamps.
+  - `qr_codes`: owner type (`business` or `staff_misc`), owner id, type, points, activation/reveal windows, signed payload metadata, created/updated attribution.
+  - `scan_events`: raw scan timestamp, attendee, QR, award decision, idempotency key, device/session context, response reason code.
+  - `point_awards`: normalized award records linked to scan/redemption/reversal origins for audit-safe exports.
+- CSV export requirement:
+  - Admin CSV exports must be generated from latest committed data at trigger time and include export `as_of_timestamp` for traceability.
 
 ## 5. Queueing, Scheduling, and Idempotency
 - Queue model: DB-backed queue table + worker endpoint.
@@ -73,17 +87,24 @@
 - Idempotency contract:
   - Required for scan awards, reward redemption, reversal, and booking reconciliation paths.
   - Endpoint-level idempotency keys + domain-level uniqueness constraints.
+  - QR generation is idempotent: repeated create requests with same fingerprint return the same active QR record, not duplicates.
 
 ## 6. AuthN/AuthZ and Security
 - Attendee authentication:
   - Supabase Auth email OTP (passwordless).
   - Event-bound session context resolved server-side.
+  - Seamless login strategy:
+    - Desk QR includes `eventSlug` + signed nonce to open the correct event entry instantly.
+    - OTP-less continuation allowed for event browsing while verification remains pending.
+    - Silent session refresh and long-lived event-day browser session cookie to avoid repeated login prompts.
+    - Device/session linking (non-fingerprinting) to preserve scan continuity across re-entry and flaky networks.
 - Admin/staff authentication:
   - Supabase Auth magic link or OTP.
   - Role model: `admin`, `staff`.
 - Authorization:
   - Server-side RBAC checks in every privileged mutation handler.
   - No UI-only authorization.
+  - Staff permissions include QR generation for miscellaneous event entities (for example guest speakers) within configured policy limits.
 - Security controls:
   - Rate limits for auth, scan, redeem, notification send, and export endpoints.
   - Signed QR payloads with expiry + replay-safe award handling.
@@ -116,6 +137,7 @@
   - Leaderboard materialized/read model refresh strategy.
   - Aggressive payload slimming for mobile connectivity constraints.
   - Retry-safe client mutation patterns.
+  - Export freshness SLA for admin CSV generation defined and monitored (real-time snapshot expectation).
 
 ## 9. CI/CD and Quality Gates
 - Package manager/build orchestration: pnpm + Turborepo.
