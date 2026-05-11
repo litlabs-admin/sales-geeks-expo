@@ -1,9 +1,9 @@
-# SalesGeek Scotland — Local-First Phased Implementation Plan
+# SalesGeek Scotland — Phased Implementation Plan
 ## Scottish Growth Expo 2026 — Event Companion Web App
 
-> **Important:** This document is **local-only**. We are not deploying anywhere until the entire app runs end-to-end on a developer laptop and every phase test gate is green. Deployment (GCP, scaling, infra) is **deferred** and will be planned in a separate document once local is fully working.
+> **Stack.** Frontend on **Vercel** (Next.js), backend on **GCP** (Cloud Run), data + auth on **Supabase** (Postgres + Supabase Auth + Storage), email on **Resend**, cache/idempotency on **Upstash Redis**. We work against a real Supabase project from day one — no local Supabase CLI, no local Postgres.
 
-> **Why local-first?** It's cheaper, faster to iterate on, and you never debug "is this a deployment problem or a code problem" mid-event. Once everything works locally, taking it to GCP is mechanical.
+> **SQL workflow.** Every phase ships a SQL migration file in `supabase/sql/`. You paste it into the **Supabase Dashboard → SQL Editor** when you start that phase. The folder is built up phase by phase during the build itself — we are not pre-writing all migrations.
 
 > **Sources of truth for scope:** [northstar.md](../northstar.md), [docs/read.md](../read.md), [deliverables.md](../deliverables.md).
 
@@ -11,175 +11,475 @@
 
 ## How this document is organized
 
-1. **Part 1 — Local setup.** Everything you need on your laptop. One-time install. Run once and forget.
-2. **Part 2 — The phased build.** Phases 0 through 9. Each phase has the same shape:
+1. **Part 1 — Architecture.** The three-tier split (Vercel + GCP + Supabase) and how the pieces talk.
+2. **Part 2 — Accounts & one-time setup.** Supabase, Vercel, GCP, Resend, Upstash, Cloudflare. Walked through in order.
+3. **Part 3 — Email (Resend).** Production sending domain, DNS (SPF/DKIM/DMARC), and how Resend powers Supabase Auth emails.
+4. **Part 4 — Auth (Supabase Auth).** Email OTP, 24-hour session, anonymous sign-in for the pre-OTP app entry flow.
+5. **Part 5 — Notifications.** In-app + Realtime + email — the full three-layer system.
+6. **Part 6 — The SQL folder.** Convention for `supabase/sql/` and how phases use it.
+7. **Part 7 — The phased build.** Phases 0 through 9. Each phase has:
    - **What we're building** (plain English)
-   - **Files & DB tables** involved
-   - **How to build it** (step-by-step)
-   - **Scripts to create** (concrete shell/TS scripts you write and check in)
-   - **How to test it** (commands to run)
-   - **Test gate** (must pass before next phase opens)
-   - **Non-negotiables** (rules that don't bend under deadline)
-3. **Part 3 — Deployment (deferred).** A placeholder. We come back to this only after Phase 9.
+   - **SQL to paste** (file in `supabase/sql/`)
+   - **Frontend (Vercel) changes**
+   - **Backend (GCP) changes**
+   - **Scripts to create**
+   - **How to test it**
+   - **Test gate**
+   - **Non-negotiables**
+8. **Part 8 — Production cutover.** Promoting dev → prod Supabase, prod GCP, prod Vercel.
 
 ---
 
-# Part 1 — Local setup
+# Part 1 — Architecture
 
-## 1.1 What you need on your laptop
+## 1.1 The three-tier split
 
-Install these once. If you already have them, skip.
+```
+                                ┌──────────────────────────────┐
+                                │      User (mobile browser)   │
+                                └──────────────┬───────────────┘
+                                               │ HTTPS
+                                               ▼
+                              ┌────────────────────────────────┐
+                              │           VERCEL               │
+                              │   Next.js 14 (App Router)      │
+                              │   - UI / pages                 │
+                              │   - Public Server Components   │
+                              │   - Middleware (slug guard)    │
+                              │   - Light edge handlers        │
+                              │   - supabase-js (browser)      │
+                              └────────┬───────────────┬───────┘
+                                       │               │
+                       JWT-authed REST │               │ supabase-js
+                       (mutations,     │               │ (auth + safe
+                        scoring, etc.) │               │  reads via RLS,
+                                       │               │  Realtime push)
+                                       ▼               ▼
+                            ┌────────────────┐    ┌────────────────────┐
+                            │      GCP       │    │     SUPABASE       │
+                            │  Cloud Run     │    │  - Postgres 15     │
+                            │  (backend API) │    │  - Supabase Auth   │
+                            │  + workers     │◄───┤  - Storage         │
+                            │  + cron        │    │  - Realtime        │
+                            │  + webhooks    │    └────────────────────┘
+                            └────┬───────────┘
+                                 │
+                                 ▼
+                            ┌────────────────┐    ┌────────────────────┐
+                            │ Upstash Redis  │    │      Resend        │
+                            │ (idempotency,  │    │  (transactional    │
+                            │  rate limits,  │    │   email + SMTP for │
+                            │  scan locks)   │    │   Supabase Auth)   │
+                            └────────────────┘    └────────────────────┘
+```
+
+## 1.2 What lives where, and why
+
+| Layer | Platform | What it holds |
+|---|---|---|
+| **Frontend (Vercel)** | Next.js App Router | All UI, attendee + admin + staff routes, middleware, the slug guard, lightweight server components. The browser uses `@supabase/supabase-js` directly for **auth** and for **safe reads** (leaderboard, agenda) that go through Postgres RLS. The browser **never** writes scoring or redemption data — those go to GCP. |
+| **Backend (GCP)** | Cloud Run service | All trusted business logic: scoring engine, redemption, William reconciler, exports, webhooks (Calendly), and the background workers. Validates Supabase JWTs on inbound requests. Connects to Supabase Postgres with the **service-role key** (bypasses RLS). Triggered by **Cloud Scheduler** for cron and **Cloud Tasks** for deferred jobs. |
+| **Data + auth (Supabase)** | Supabase Cloud | Postgres (every row), Supabase Auth (every login), Storage (sponsor logos, QR PNGs, exports), Realtime (push notifications to attendees). |
+| **Email (Resend)** | Resend Cloud | Sends every email: OTPs (via Supabase Auth's SMTP setting), William booking confirmations, export-ready notifications, ops alerts. |
+| **Cache (Upstash Redis)** | Upstash | Scan idempotency keys, rate-limit windows, leaderboard cache, OTP throttling. HTTP API — works from Cloud Run and from Vercel Edge if needed. |
+| **DNS / WAF (Cloudflare)** | Cloudflare | DNS for `salesgeek.scot`, proxied to Vercel and to the GCP backend. SPF/DKIM/DMARC for the email subdomain. |
+
+## 1.3 Why this split (and not all-Vercel or all-Supabase)
+
+- **Vercel is the right home for Next.js.** Edge, ISR, server components, preview deployments — all first-class.
+- **Supabase is the right home for the data plane.** We get Postgres, Auth, Storage, and Realtime as one managed product. No glue.
+- **GCP holds the trusted backend** because (a) we already have credits, (b) the scoring/redemption engine needs durable workers, fixed cron, and webhook endpoints that should not share a function pool with the public site, and (c) Cloud Run handles spiky event-day traffic cheaply.
+- **The browser only ever talks to Vercel and to Supabase.** It never talks to GCP directly except via the Vercel API — Vercel proxies to GCP under the hood. (Optional later optimization: let the browser call GCP directly for scan endpoints. Day-one keeps it simple — Vercel proxies.)
+
+## 1.4 Request paths (concrete)
+
+**Attendee scans a QR:**
+
+1. Browser opens `https://app.salesgeek.scot/sge-2026/scan/abc?sig=...`.
+2. Vercel route handler validates the HMAC signature locally.
+3. Vercel calls the GCP backend `POST https://api.salesgeek.scot/scan` with the Supabase access token in `Authorization: Bearer`.
+4. GCP validates the JWT against Supabase's JWKS, runs the idempotent scoring transaction against Supabase Postgres (via service-role connection), writes the audit row, returns the result.
+5. Vercel relays the result to the browser.
+6. The browser's open Supabase Realtime channel receives the score update event and animates the new total — no polling.
+
+**Admin sends a broadcast:**
+
+1. Admin posts to `/admin/notifications/new` on Vercel.
+2. Vercel calls GCP `POST /notifications/broadcast`.
+3. GCP creates the `notifications` row and enqueues a Cloud Task that fans out per-attendee `notification_recipients` rows in batches.
+4. Supabase Realtime emits an insert event on each row.
+5. Every attendee's browser, subscribed to its own user's `notification_recipients` channel, receives the message instantly.
+
+**Calendly webhook (William reward):**
+
+1. Calendly sends `POST https://api.salesgeek.scot/webhooks/calendly/<eventSlug>` directly to GCP.
+2. GCP validates the HMAC, matches the invitee email to an attendee, completes the redemption transaction in Supabase Postgres.
+
+---
+
+# Part 2 — Accounts & one-time setup
+
+Do all of these once, in this order. They're independent of the code.
+
+## 2.1 What you need on your laptop
 
 | Tool | Version | Why |
 |---|---|---|
-| Node.js | 20.x LTS | Runs Next.js and the worker |
-| pnpm | 9.x | Package manager (faster than npm, monorepo-friendly) |
-| Docker Desktop or OrbStack | latest | Container runtime — Supabase CLI and Redis run on top of it |
-| Supabase CLI | 1.x latest | Spins up a full local Supabase stack (Postgres + Studio + Inbucket email) |
+| Node.js | 20.x LTS | Build and run the Next.js app |
+| pnpm | 9.x | Monorepo package manager |
+| `gcloud` CLI | latest | Deploy to Cloud Run, manage GCP |
 | Git | any recent | Source control |
-| `psql` client | 15.x | Poke the database directly when debugging |
 | A code editor | VS Code / Cursor / similar | Day-to-day work |
 
-Install on macOS:
-
 ```bash
-# Node + pnpm
-brew install node@20
+brew install node@20 gcloud
 npm install -g pnpm
-
-# Postgres client
-brew install libpq && brew link --force libpq
-
-# OrbStack (lighter than Docker Desktop)
-brew install --cask orbstack
-
-# Supabase CLI
-brew install supabase/tap/supabase
+gcloud auth login
+gcloud auth application-default login
 ```
 
-That's it. Everything else runs in containers managed by Supabase CLI or our small Docker Compose file (which now only holds Redis).
+**No Docker, no Postgres, no Supabase CLI on your laptop.** The database, auth, and storage all live in Supabase Cloud from day one.
 
-## 1.2 What runs locally
+## 2.2 Accounts checklist
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  Your laptop                                                     │
-│                                                                  │
-│   pnpm dev (Next.js on http://localhost:3000)                    │
-│   pnpm dev:worker (background jobs)                              │
-│                                                                  │
-│   ┌────────────────────────────────────────────────────────────┐ │
-│   │  Supabase CLI (`supabase start` — bundle of containers)    │ │
-│   │   - postgres        :54322  (the database)                 │ │
-│   │   - studio (web UI) :54323  (DB browser, table editor)     │ │
-│   │   - kong/api gw     :54321  (REST + Storage + Auth gw)     │ │
-│   │   - inbucket        :54324  (fake email inbox, web UI)     │ │
-│   │   - storage         (via :54321) (file uploads — optional) │ │
-│   └────────────────────────────────────────────────────────────┘ │
-│                                                                  │
-│   ┌────────────────────────────────────────────────────────────┐ │
-│   │  Docker Compose (we own this — just Redis)                 │ │
-│   │   - redis           :6379   (cache, rate limit, queue)     │ │
-│   └────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
-```
+Create accounts (or get added) on:
 
-- **Supabase CLI** runs the exact same Postgres version (15) as Supabase Cloud, so we get production parity. It also runs **Inbucket**, a fake SMTP server with a web UI on `http://localhost:54324` — every email the app sends (OTPs, magic links) lands there. No real emails go out locally. No Resend account needed for development.
-- **Studio** at `http://localhost:54323` is the Supabase UI — useful for poking the DB without `psql`.
-- **Redis is not part of Supabase.** We keep it in a tiny `docker-compose.yml` of our own. It's still required (idempotency keys, rate limits, the local job queue).
-- Prisma is still our ORM. We use Supabase as a managed Postgres — we are **not** using Supabase Auth, Realtime, or Edge Functions (the spec calls for a custom OTP/magic-link flow). Supabase Storage is optional and used in Phase 4 for sponsor logos / QR PNG exports.
-- No cloud, no internet dependency for the core loop.
+| Service | What for | Tier |
+|---|---|---|
+| **Supabase** (supabase.com) | Postgres + Auth + Storage + Realtime | Free tier for dev, Pro for production |
+| **Vercel** (vercel.com) | Next.js hosting | Hobby for dev, Pro for production |
+| **Google Cloud** (cloud.google.com) | Cloud Run, Scheduler, Tasks, Secret Manager | Existing credits |
+| **Resend** (resend.com) | Transactional email | Free tier covers dev, paid for production volume |
+| **Upstash** (upstash.com) | Redis | Free tier covers dev, pay-as-you-go for prod |
+| **Cloudflare** (cloudflare.com) | DNS for `salesgeek.scot` | Free |
+| **GitHub** | Code | — |
 
-## 1.3 One-time bootstrap
+## 2.3 Supabase — create the projects
 
-This is **Phase 0** below in concrete terms. Once it works, you have a green-field repo and you start building features.
+We use **two Supabase projects** end-to-end:
+
+- `salesgeek-dev` — what we develop against. Throwaway data. SQL is pasted here first.
+- `salesgeek-prd` — production. Only touched once a phase's SQL has been validated in dev.
+
+For each project:
+
+1. Sign in to **app.supabase.com** → **New project**.
+2. Name (`salesgeek-dev` or `salesgeek-prd`), generate a database password (save in 1Password), pick region **`eu-west-2` (London)**.
+3. Wait for provisioning. Copy from **Project Settings**:
+   - **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+   - **anon public key** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **service_role key** (Settings → API → Project API keys → service_role; reveal) → `SUPABASE_SERVICE_ROLE_KEY`
+     - **Never expose this in the browser.** GCP backend only.
+   - **Database connection string** (Settings → Database → Connection string → URI):
+     - **Session-mode (port 5432)** for migrations and the GCP backend → `DATABASE_URL`
+     - **Transaction-mode pooler (port 6543)** for fast app queries → `DATABASE_POOL_URL`
+
+We will paste SQL into this project via **Dashboard → SQL Editor** during each phase — see Part 6.
+
+(The full Supabase Auth configuration — Resend SMTP, 24h session, anonymous sign-in — is covered in Part 4 once Resend is set up.)
+
+## 2.4 Resend — sign up and start domain verification
+
+We need DNS records to propagate before email works. Start this early.
+
+1. Sign up at **resend.com**.
+2. **Domains → Add domain.** Use a subdomain so the apex stays free for other services: `mail.salesgeek.scot`.
+3. Resend shows three DNS records (SPF, DKIM, DMARC). Keep this tab open — you'll add the records to Cloudflare in §2.7.
+
+Full details in Part 3.
+
+## 2.5 Upstash Redis — create the database
+
+1. Sign in to **upstash.com** → **Redis → Create Database**.
+2. Name: `salesgeek-dev-redis`. Region: **eu-west-2**. TLS: on.
+3. Copy from the database page:
+   - **REST URL** → `UPSTASH_REDIS_REST_URL`
+   - **REST Token** → `UPSTASH_REDIS_REST_TOKEN`
+
+Repeat for `salesgeek-prd-redis` when you're ready to launch.
+
+## 2.6 GCP — create the projects
 
 ```bash
-# 1. clone & install
-git clone <repo-url> sales-geek-expo
-cd sales-geek-expo
-pnpm install
-
-# 2. start Supabase locally (Postgres + Studio + Inbucket)
-#    This pulls images the first time — give it a few minutes.
-supabase start
-
-# 3. start Redis (our own tiny compose file)
-docker compose -f infra/docker/docker-compose.yml up -d
-
-# 4. copy env template
-#    `supabase start` prints connection strings at the end — paste them here.
-cp .env.example .env.local
-
-# 5. run migrations and seed
-pnpm db:reset      # wraps `supabase db reset` + Prisma migrate
-pnpm db:seed
-
-# 6. start the app and worker in two terminals
-pnpm dev           # terminal 1
-pnpm dev:worker    # terminal 2
-
-# 7. open the app
-open http://localhost:3000/sge-2026
-# fake email inbox (Inbucket)
-open http://localhost:54324
-# Supabase Studio (DB browser)
-open http://localhost:54323
+gcloud projects create salesgeek-dev --name="SalesGeek Dev"
+gcloud projects create salesgeek-prd --name="SalesGeek Prod"
+# link billing to use credits
+gcloud billing projects link salesgeek-dev --billing-account=<ID>
+gcloud billing projects link salesgeek-prd --billing-account=<ID>
 ```
 
-If those commands work, your laptop is ready and you can move to Phase 1.
-
-**Useful Supabase CLI commands you'll learn quickly:**
+Enable the APIs we'll need (for each project):
 
 ```bash
-supabase start              # boot the local stack
-supabase stop               # shut it down
-supabase status             # show URLs, keys, ports
-supabase db reset           # nuke + re-run all migrations + run seed.sql
-supabase migration new <n>  # create a new migration file
-supabase db diff -f <name>  # generate a migration from schema changes
+gcloud services enable \
+  run.googleapis.com \
+  cloudbuild.googleapis.com \
+  cloudscheduler.googleapis.com \
+  cloudtasks.googleapis.com \
+  secretmanager.googleapis.com \
+  artifactregistry.googleapis.com \
+  --project=salesgeek-dev
 ```
 
-We use `supabase db reset` for raw schema, and Prisma migrations on top for app-level schema management (see Phase 0 for the exact dance).
+The actual Cloud Run deploy happens in Phase 0 — for now we just need the project ready.
 
-## 1.4 The pnpm scripts you'll live in
+## 2.7 Cloudflare — DNS
 
-These go in the root `package.json`. Build them as part of Phase 0 — every later phase adds more scripts.
+In Cloudflare, for `salesgeek.scot`:
 
-```json
-{
-  "scripts": {
-    "dev": "turbo run dev --filter=web",
-    "dev:worker": "turbo run dev --filter=worker",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "supabase:start": "supabase start",
-    "supabase:stop": "supabase stop",
-    "supabase:status": "supabase status",
-    "redis:up": "docker compose -f infra/docker/docker-compose.yml up -d",
-    "redis:down": "docker compose -f infra/docker/docker-compose.yml down",
-    "stack:up": "pnpm supabase:start && pnpm redis:up",
-    "stack:down": "pnpm redis:down && pnpm supabase:stop",
-    "db:reset": "tsx scripts/db-reset.ts",
-    "db:seed": "tsx scripts/seed-base.ts",
-    "db:psql": "supabase db psql",
-    "db:studio": "open http://localhost:54323",
-    "db:migrate": "pnpm --filter db prisma migrate dev",
-    "db:generate": "pnpm --filter db prisma generate",
-    "smoke": "tsx scripts/smoke.ts"
-  }
-}
+| Record | Type | Value | Purpose |
+|---|---|---|---|
+| `app` | CNAME | `cname.vercel-dns.com` | Vercel — frontend |
+| `api` | CNAME | (Cloud Run URL, set after Phase 0 deploy) | GCP backend |
+| `mail` (3 records from Resend) | TXT / MX / CNAME | (from Resend dashboard) | Email SPF/DKIM/DMARC |
+
+For `staging.salesgeek.scot` we do the same with the staging Supabase/Vercel/GCP projects (when we're ready — early phases can run on the dev project alone).
+
+## 2.8 Environment variables you'll need
+
+These end up in three places: your laptop's `.env.local`, Vercel's environment variables (dev + preview + prod), and GCP Secret Manager (backend only).
+
+```env
+# Public (browser-safe) — Vercel only
+NEXT_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_BACKEND_URL=https://api.salesgeek.scot
+
+# Server-only — Vercel server runtime + GCP backend
+SUPABASE_SERVICE_ROLE_KEY=...
+SUPABASE_JWT_SECRET=...                  # for backend JWT validation
+DATABASE_URL=postgresql://...:5432/...   # session mode (migrations + backend)
+DATABASE_POOL_URL=postgresql://...:6543/... # transaction pooler (hot reads)
+UPSTASH_REDIS_REST_URL=...
+UPSTASH_REDIS_REST_TOKEN=...
+RESEND_API_KEY=...
+EMAIL_FROM="SalesGeek Scotland <noreply@mail.salesgeek.scot>"
+QR_SIGNING_SECRET=<32 random bytes>
+CALENDLY_WEBHOOK_SECRET=...
+BACKEND_SHARED_SECRET=<32 random bytes>   # Vercel ↔ GCP HMAC for non-user calls
 ```
 
-The exact list grows phase by phase. The point: every test, every reset, every check is a named script. You should never have to remember a long curl command.
+Secrets in GCP go through Secret Manager; secrets in Vercel go through the Environment Variables UI. Never check any of these into git.
 
 ---
 
-# Part 2 — The phased build
+# Part 3 — Email (Resend) — production setup
+
+Email is mission-critical. Without working delivery, the OTP doesn't arrive and the desk line stops moving. We do this end-to-end from day one — there is no fake inbox.
+
+## 3.1 The sending domain
+
+Use a **dedicated subdomain** for transactional email: `mail.salesgeek.scot`. This isolates reputation from any future marketing email on the apex.
+
+## 3.2 DNS records (the part that takes hours, not minutes)
+
+Resend's Domains page shows three records. They look like this (your values will differ):
+
+| Type | Host | Value | Purpose |
+|---|---|---|---|
+| TXT | `send.mail.salesgeek.scot` | `v=spf1 include:amazonses.com ~all` | **SPF** — authorizes Resend to send |
+| CNAME | `resend._domainkey.mail.salesgeek.scot` | `resend._domainkey.amazonses.com` | **DKIM** — signs your messages |
+| TXT | `_dmarc.mail.salesgeek.scot` | `v=DMARC1; p=quarantine; rua=mailto:dmarc@salesgeek.scot` | **DMARC** — anti-spoofing policy |
+
+Add all three to Cloudflare. Click **Verify** in Resend and wait for green checks.
+
+> **Until SPF/DKIM/DMARC are green, do not send to real inboxes.** Gmail and Outlook will silently quarantine OTPs and the desk experience will break. Verify with `mxtoolbox.com/SuperTool.aspx` for SPF/DKIM/DMARC checks.
+
+## 3.3 Wire Resend into Supabase Auth (so OTPs go through Resend)
+
+Supabase Auth has a built-in SMTP relay with a low daily quota — fine for the very first signup test, never fine for an event. Replace it with Resend SMTP before Phase 2.
+
+In each Supabase project: **Authentication → SMTP Settings → Enable Custom SMTP**.
+
+| Field | Value |
+|---|---|
+| Sender email | `noreply@mail.salesgeek.scot` |
+| Sender name | `SalesGeek Scotland` |
+| Host | `smtp.resend.com` |
+| Port | `465` |
+| Username | `resend` |
+| Password | your Resend API key |
+| Minimum interval between emails | `1` second |
+
+Save. Send yourself a test OTP from the Supabase Auth screen and confirm the email arrives via Resend (you'll see it in Resend's **Logs** tab).
+
+## 3.4 Email templates Supabase Auth uses
+
+In Supabase: **Authentication → Email Templates**. We customize:
+
+- **Magic Link** (used for admin/staff login) — content + brand
+- **OTP** (used for attendee email login) — content + brand
+- **Confirm signup** — disabled, since we use OTP login flow
+
+Templates use Handlebars-style tokens like `{{ .Token }}` and `{{ .SiteURL }}`. Keep them mobile-friendly and short.
+
+## 3.5 Transactional email beyond auth (GCP backend → Resend)
+
+The GCP backend sends a few non-auth emails:
+
+| Trigger | Email |
+|---|---|
+| William booking confirmed | "Your strategy session is booked — see you on …" |
+| Export completed | Admin gets a signed URL to the CSV |
+| High-priority broadcast | Optional email mirror of in-app notification |
+
+The backend uses `resend` (Node SDK) directly. Templates are **React Email** components in `apps/backend/email/` so they preview locally.
+
+## 3.6 Email deliverability checks (do this before Phase 9)
+
+- Send a test OTP to a fresh `@gmail`, `@outlook`, `@icloud` inbox. Confirm inbox placement, not spam.
+- Run `mail-tester.com` against the sending domain — target score ≥ 9/10.
+- Verify DMARC reports arrive at `dmarc@salesgeek.scot`.
+
+---
+
+# Part 4 — Auth (Supabase Auth)
+
+We **drop the custom OTP code** entirely. Supabase Auth handles OTP issue, verify, rate-limit, lockout, JWT, refresh tokens.
+
+## 4.1 Configuration (in Supabase Dashboard, both projects)
+
+**Authentication → Providers → Email:**
+
+- Enable **Email OTP** (passwordless, 6-digit code).
+- Disable email signup confirmation (users sign in by OTP — there is no separate "confirm").
+- Set **OTP expiry** to 600 seconds (10 minutes).
+
+**Authentication → Sessions:**
+
+- **JWT expiry**: `3600` seconds (1 hour access token — short for safety).
+- **Refresh token rotation**: ON.
+- **Refresh token reuse interval**: `10` seconds.
+- **Inactivity timeout / refresh token TTL**: `86400` seconds (**24 hours**).
+
+What this gives us: the access token rotates every hour silently in the background, and the refresh token is good for 24 hours. From the user's POV, they don't log out for 24 hours of activity. The browser does this with `supabase.auth.startAutoRefresh()` (default-on in `@supabase/supabase-js@2`).
+
+**Authentication → URL Configuration:**
+
+- Site URL: `https://app.salesgeek.scot` (and the dev/preview equivalents).
+- Redirect allow-list: production + Vercel preview domains.
+
+**Authentication → Providers → Anonymous sign-ins:** **enable.** We use this for the pre-OTP "enter the app before verifying" flow (Phase 2).
+
+## 4.2 The auth flow we ship
+
+The spec says attendees can enter the app before verification (to keep the registration desk moving). With Supabase Auth this becomes:
+
+1. **Attendee scans desk QR or visits the join URL.** The browser immediately calls `supabase.auth.signInAnonymously()`. They are now logged in as an anonymous user with a unique `auth.users.id` — they can see the app and have a session.
+2. **At their leisure they enter their email.** Browser calls `supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })`. OTP arrives via Resend.
+3. **They paste the OTP.** Browser calls `supabase.auth.verifyOtp(...)`. The anonymous user is **linked/upgraded** to a verified email user (Supabase does this in-place when an anonymous user verifies). Their `auth_user_id` does not change; their data carries over.
+4. **`public.users` row** is created automatically by the trigger in our SQL — the new `auth.users` row fires `handle_new_auth_user()` which inserts into `public.users` with `type = 'attendee'`.
+5. **Pre-signup QR scans** are stored against the anonymous `auth_user_id`. After OTP verification, no replay step is needed — the same user is just now verified.
+
+What "verified" means for prize eligibility: an `attendees.is_verified` flag is set when the user transitions from anonymous to email-verified (we listen for the `auth.users.is_anonymous` flip).
+
+## 4.3 Admin / staff login
+
+Same `signInWithOtp` flow with **magic link** instead of code. Their `public.users.type` is `admin` or `staff` — set by an admin via the backend, not derivable from auth.
+
+## 4.4 Validating Supabase JWTs in the GCP backend
+
+The GCP backend receives `Authorization: Bearer <access_token>` on every Vercel-proxied request. It validates the JWT using **`SUPABASE_JWT_SECRET`** (from Supabase Dashboard → Settings → API → JWT Secret). On valid, it extracts `sub` (the auth user id), looks up `public.users` by `auth_user_id`, and attaches role + attendee record to the request context.
+
+```ts
+// Sketch of the middleware in apps/backend/src/middleware/auth.ts
+import { jwtVerify } from 'jose';
+const secret = new TextEncoder().encode(process.env.SUPABASE_JWT_SECRET);
+const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] });
+// payload.sub === auth.users.id
+```
+
+---
+
+# Part 5 — Notifications (the full system)
+
+Three layers. All shipped together in Phase 7.
+
+## 5.1 In-app notifications (the source of truth)
+
+- Table `notifications` (the broadcast): title, body, audience filter, scheduled_at, created_by.
+- Table `notification_recipients` (one row per attendee per notification): delivered_at, read_at.
+- Admin creates a broadcast → GCP backend creates the `notifications` row → enqueues a Cloud Task that fans out per-attendee `notification_recipients` rows in batches of 500.
+
+## 5.2 Realtime push (delivery, no polling)
+
+- Supabase Realtime is enabled on `notification_recipients` (publication adds inserts only — not the whole row history).
+- The attendee browser, on login, opens a Realtime subscription:
+  ```ts
+  supabase.channel(`notifs:${userId}`)
+    .on('postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notification_recipients',
+          filter: `attendee_id=eq.${userId}` },
+        (payload) => addNotification(payload.new))
+    .subscribe();
+  ```
+- Result: zero-latency delivery, no polling, no battery drain.
+- Fallback: a 60-second poll on focus, in case the WebSocket was dropped.
+
+## 5.3 Email mirror (for high-priority broadcasts only)
+
+- Admin's broadcast form has a checkbox: "**Also send by email**".
+- If on, the fan-out task batches Resend `batch.send` calls (Resend supports up to 100 recipients per call).
+- Delivery status comes back via Resend's webhook into the GCP backend and is recorded on `notification_recipients`.
+
+## 5.4 Scheduled broadcasts
+
+- Set `scheduled_at` in the future. The row sits in `notifications` until due.
+- **Cloud Scheduler** fires the GCP backend `POST /jobs/notifications-due` every minute. The job picks up any rows where `scheduled_at <= now()` and not yet dispatched, then fans them out exactly like an immediate broadcast.
+
+## 5.5 William reconciliation (related background system)
+
+The same job runner handles the William reward webhook reconciler: every 5 minutes Cloud Scheduler kicks `POST /jobs/william-reconcile`, which queries Calendly for any pending bookings that haven't been webhooked back yet, and completes the redemption.
+
+---
+
+# Part 6 — The `supabase/sql/` folder
+
+## 6.1 Convention
+
+Every phase that touches the database ships **one SQL file** in `supabase/sql/`. The numeric prefix is the paste order.
+
+```
+supabase/
+  sql/
+    README.md
+    0000_extensions.sql
+    0001_phase0_foundation.sql
+    0002_phase1_multi_event.sql
+    0003_phase2_identity.sql
+    0004_phase3_content.sql
+    0005_phase4_business_qr.sql
+    0006_phase5_scoring.sql
+    0007_phase6_rewards.sql
+    0008_phase7_notifications.sql
+    0009_phase8_archive.sql
+    0010_storage_buckets.sql
+```
+
+**The folder is built up phase by phase as we implement each phase. We do not pre-write all the SQL up front** — the SQL is written together with the app code that uses it, so the schema and the code stay aligned.
+
+Each SQL file must be:
+
+- **Idempotent.** Use `create table if not exists`, `create index if not exists`, `do $$ ... exception when duplicate_object then null; end $$;` for enums. Running the same file twice is safe.
+- **Self-contained.** Includes table DDL, indexes, constraints, RLS enable, and any triggers introduced in that phase.
+- **RLS-on by default.** Every table has Row Level Security enabled with **no default policies** — only the `service_role` (used by GCP backend) can read/write. Where we need browser-direct reads (leaderboard, agenda, events_public), we add **explicit select policies** for the `anon` and `authenticated` roles in the same file.
+
+## 6.2 How to apply a phase's SQL
+
+1. Open **app.supabase.com** → your dev project → **SQL Editor → New query**.
+2. Open the phase's `.sql` file in the repo.
+3. Paste, click **Run**. The Editor shows any errors with line numbers.
+4. Once dev is green, repeat the paste against the prod project at production cutover (Part 8).
+
+## 6.3 Types in the app
+
+The frontend (Vercel) uses `@supabase/supabase-js` typed via **`supabase gen types typescript`** run **once per phase** against the dev project — but you can also generate via the Dashboard's "Generate types" button. No CLI is strictly required. Generated types live in `packages/contracts/db-types.ts`.
+
+The GCP backend uses **Drizzle ORM** with hand-written TypeScript schema definitions in `apps/backend/src/db/schema.ts`. Drizzle stays the source of typed-query truth on the backend; the SQL files in `supabase/sql/` stay the source of schema truth in Postgres. We keep them in sync by treating SQL as canonical and updating Drizzle to match each phase.
+
+---
+
+# Part 7 — The phased build
 
 > **Rule of the road:** A phase is closed only when:
 > 1. All listed P0 test cases pass on your laptop.
@@ -192,73 +492,57 @@ The exact list grows phase by phase. The point: every test, every reset, every c
 ## Phase 0 — Foundation (Day 1, 12 May)
 
 ### What we're building
-The empty house. A monorepo that boots, has a database, runs migrations, has audit-logged service patterns, and runs `/health` returning 200. No features yet.
+The empty house. A monorepo that boots, a Vercel project linked to GitHub, a GCP Cloud Run backend that responds on `/health`, and a Supabase project holding the first tables. End-to-end across all three platforms before any feature lands.
 
-### Files & DB tables
-- Files:
-  - `apps/web/` — Next.js 14 App Router scaffold
-  - `apps/worker/` — small Node service for background jobs
-  - `packages/domain/` — domain logic (we build into this every phase)
-  - `packages/db/` — Prisma schema + client
-  - `packages/contracts/` — Zod schemas, shared types
-  - `supabase/config.toml` — Supabase local stack config (generated by `supabase init`)
-  - `supabase/migrations/` — SQL migrations Supabase will run on `db reset` (we keep these in sync with Prisma; see "How to build it" step 5)
-  - `supabase/seed.sql` — optional raw SQL seed (we mostly use TS seed scripts instead)
-  - `infra/docker/docker-compose.yml` — Redis only
-  - `.env.example` — template for env vars
-- DB tables (just enough to test the plumbing):
-  - `events` (id, slug, name, lifecycle_state, starts_at, ends_at, brand_tokens jsonb)
-  - `users` (id, type, email, created_at)
-  - `audit_logs` (id, actor_id, actor_type, action, target_type, target_id, reason, payload jsonb, created_at)
+### SQL to paste
+Write `supabase/sql/0000_extensions.sql` (enables `pgcrypto`, `uuid-ossp`, `pg_trgm`, `btree_gin`) and `supabase/sql/0001_phase0_foundation.sql` (creates `events`, `users`, `audit_logs`, with RLS on and an auto-sync trigger from `auth.users → public.users`). Paste both into Supabase Dashboard → SQL Editor → Run, against the **dev** project.
+
+### Files & repo layout
+- `apps/web/` — Next.js 14 App Router (deployed to Vercel)
+- `apps/backend/` — Hono server on Cloud Run (GCP backend)
+- `apps/backend/Dockerfile` — multi-stage Node 20 build
+- `packages/domain/` — pure domain logic, imported by `apps/backend`
+- `packages/contracts/` — Zod schemas + generated Supabase types
+- `supabase/sql/` — pasted-in SQL migrations (start populating in this phase)
+- `.env.example` — every env var the app/backend needs
+- `infra/gcp/` — Terraform or gcloud scripts for Cloud Run, Scheduler, Tasks
 
 ### How to build it (step-by-step)
-1. **Scaffold the monorepo.** Use pnpm workspaces + Turborepo. Root `pnpm-workspace.yaml` lists `apps/*` and `packages/*`.
-2. **Create the Next.js app.** `pnpm create next-app@14 apps/web --typescript --app --tailwind --eslint`. Strip the demo content.
-3. **Create the worker app.** A small `apps/worker/src/index.ts` that exposes `POST /jobs/:name` (we use it in Phase 7).
-4. **Initialize Supabase locally.** In the repo root: `supabase init` (creates `supabase/config.toml`). Then `supabase start` to boot the stack. Copy the printed `DB URL`, `anon key`, and `service_role key` into `.env.local`. We do NOT use the anon/service keys for app auth (we keep our custom OTP) but Storage uses them in Phase 4.
-5. **Create the Prisma package.**
-    - `packages/db/prisma/schema.prisma` with the three tables above.
-    - Point Prisma at Supabase's local Postgres:
-      ```
-      DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=public
-      DIRECT_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=public
-      ```
-      (In production these split — `DATABASE_URL` goes through Supavisor pooler, `DIRECT_URL` is for migrations. Locally they're the same.)
-    - Run `pnpm db:migrate` to create the first migration. Prisma writes a SQL file to `packages/db/prisma/migrations/`.
-    - Mirror that SQL into `supabase/migrations/` so `supabase db reset` rebuilds the same schema (the `db-reset.ts` script in step 11 below handles this automatically). The Prisma migration is the source of truth; Supabase's migrations folder is a kept-in-sync copy.
-6. **Set up the audit pattern.** In `packages/domain/audit.ts`, export a function `withAudit(tx, actor, action, target, reason, fn)` that wraps a Prisma transaction and writes an `audit_logs` row inside the same `$transaction`. Every mutation in later phases uses this wrapper.
-7. **Set up RBAC.** In `packages/domain/rbac.ts`, export `canDoAction(actor, action, resource)` and a tRPC middleware `requireRole(role)`.
-8. **Add the `/health` route.** `apps/web/app/health/route.ts` returning `{ ok: true, version: process.env.GIT_SHA ?? 'dev' }`.
-9. **Add the Redis Docker Compose.** A `infra/docker/docker-compose.yml` with just a `redis:7-alpine` service on port 6379.
-10. **Add CI.** `.github/workflows/ci.yml` runs `pnpm typecheck && pnpm lint && pnpm test`. CI provisions a fresh Postgres via `postgres:15` service container (no Supabase needed in CI — Prisma migrations target plain Postgres).
-11. **A note on the Prisma + Supabase split.**
-    - **Prisma** owns the schema. Migrations live in `packages/db/prisma/migrations/`.
-    - **Supabase** locally just runs Postgres; we don't write tables via Supabase Studio.
-    - On `supabase db reset`, Supabase blanks the DB. We then immediately run `prisma migrate deploy` to re-apply Prisma migrations. This is the "dance" — `scripts/db-reset.ts` (below) handles it in one command.
+
+1. **Scaffold the monorepo.** pnpm workspaces + Turborepo. Root `pnpm-workspace.yaml` lists `apps/*` and `packages/*`.
+2. **Create the Next.js app.** `pnpm create next-app@14 apps/web --typescript --app --tailwind --eslint`. Strip the demo content. Add `@supabase/supabase-js` and a `lib/supabase-browser.ts` helper that creates the client with `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+3. **Create the backend.** `apps/backend/` is a small **Hono** server (lightweight Express alternative, great on Cloud Run). Routes: `GET /health`, plus a JWT validation middleware that decodes the Supabase access token using `SUPABASE_JWT_SECRET`. Connect to Postgres via **Drizzle ORM** using `DATABASE_URL` (session-mode connection).
+4. **Paste the SQL.** Open the dev Supabase project's SQL Editor and run `0000_extensions.sql` then `0001_phase0_foundation.sql`. Verify tables exist via **Table Editor**.
+5. **Generate types.** In Supabase Dashboard → API → "Generate types" → TypeScript. Save the output to `packages/contracts/db-types.ts`. (No CLI required — the dashboard gives you a copy-pasteable file.)
+6. **Wire the Drizzle schema.** In `apps/backend/src/db/schema.ts`, write Drizzle table definitions matching the SQL you pasted. This is hand-maintained; the SQL stays canonical.
+7. **Implement the audit pattern.** `packages/domain/audit.ts` exports `withAudit(tx, actor, action, target, reason, fn)` — wraps a Drizzle transaction, runs `fn`, then inserts an `audit_logs` row in the same transaction. Every later mutation uses this.
+8. **RBAC.** `packages/domain/rbac.ts` exports `canDoAction(actor, action, resource)`. A backend middleware `requireRole(...roles)` runs after JWT validation.
+9. **Deploy backend to Cloud Run.** First deploy from local: `gcloud builds submit --tag europe-west2-docker.pkg.dev/salesgeek-dev/svc/backend:v0 ./apps/backend`, then `gcloud run deploy backend --image ... --region europe-west2 --allow-unauthenticated=false`. Bind secrets from Secret Manager. Note the service URL — point Cloudflare `api.salesgeek.scot` at it.
+10. **Deploy Vercel frontend.** Connect repo on Vercel, set environment variables (Part 2.8), trigger first deploy. Vercel handles the `app.salesgeek.scot` DNS.
+11. **CI.** `.github/workflows/ci.yml` runs `pnpm typecheck && pnpm lint && pnpm test`. Vercel and Cloud Build do the deploys on merge.
+
+### Health check end-to-end
+- `https://app.salesgeek.scot/health` — Vercel responds OK.
+- `https://api.salesgeek.scot/health` — Cloud Run responds OK (returns Git SHA + Postgres reachability bool).
+- Frontend `lib/supabase-browser.ts` can `select` from `events_public` (empty array, but no auth error).
 
 ### Scripts to create
-Create each of these as a real file. Numbers refer to file paths.
 
-1. **[scripts/db-reset.ts](../scripts/db-reset.ts)** — nukes Supabase's local Postgres, re-runs Prisma migrations, regenerates the Prisma client.
-   ```ts
-   // What it does:
-   //   1. supabase db reset --no-seed              (blanks the local DB)
-   //   2. pnpm --filter db prisma migrate deploy   (applies Prisma migrations)
-   //   3. pnpm --filter db prisma generate         (regenerates the client)
-   //   4. flushes Redis (FLUSHDB) so idempotency keys don't survive across resets
-   //   5. logs "DB + Redis reset complete"
-   //
-   // We deliberately skip Supabase's own seed.sql — our TS seed scripts are richer.
-   ```
-2. **[scripts/seed-base.ts](../scripts/seed-base.ts)** — minimum seed: one event (`sge-2026`), one admin user, one staff user.
-3. **[scripts/smoke.ts](../scripts/smoke.ts)** — pings `http://localhost:3000/health`, asserts 200, exits 0/1. This is the first time we have a single command that says "is the app up?".
-4. **[scripts/test-audit.ts](../scripts/test-audit.ts)** — runs a `withAudit` call, then queries `audit_logs`, asserts one row exists with the right action and actor. Also runs the same call but throws inside, asserts no row is left behind (transactional).
-5. **[scripts/test-rbac.ts](../scripts/test-rbac.ts)** — calls `canDoAction` with a staff actor and an admin-only action, asserts false. Then with an admin actor and the same action, asserts true.
+1. **[scripts/db-truncate.ts](../scripts/db-truncate.ts)** — for the dev Supabase project only: connects via `DATABASE_URL`, truncates every app table (except `auth.*`), resets sequences. Used before re-seeding. Refuses to run if the project URL contains `prd`.
+2. **[scripts/seed-base.ts](../scripts/seed-base.ts)** — connects to dev Supabase via service-role, inserts one event (`sge-2026`), one admin user, one staff user. Idempotent (uses `on conflict do nothing`).
+3. **[scripts/smoke.ts](../scripts/smoke.ts)** — pings both `app.salesgeek.scot/health` and `api.salesgeek.scot/health`, asserts 200, exits 0/1. Takes `--env=dev|prd` flag.
+4. **[scripts/test-audit.ts](../scripts/test-audit.ts)** — calls a `withAudit` write through a backend test endpoint, queries `audit_logs`, asserts one row. Also runs the call but forces an exception inside `fn`, asserts no audit row leaked (transactional integrity).
+5. **[scripts/test-rbac.ts](../scripts/test-rbac.ts)** — generates a JWT for a fake staff user, calls an admin-only backend endpoint, asserts 403. Same with an admin JWT — asserts 200.
+6. **[scripts/gen-types.sh](../scripts/gen-types.sh)** — convenience: open Supabase Dashboard's type generator URL for the dev project (saves clicking through). Manual paste into `packages/contracts/db-types.ts`.
 
-Wire these into `package.json`:
+`package.json`:
 ```json
 "scripts": {
-  "db:reset": "tsx scripts/db-reset.ts",
+  "dev:web": "pnpm --filter web dev",
+  "dev:backend": "pnpm --filter backend dev",
+  "test": "vitest run",
+  "test:e2e": "playwright test",
+  "db:truncate": "tsx scripts/db-truncate.ts",
   "db:seed": "tsx scripts/seed-base.ts",
   "smoke": "tsx scripts/smoke.ts",
   "test:audit": "tsx scripts/test-audit.ts",
@@ -268,31 +552,35 @@ Wire these into `package.json`:
 
 ### How to test it
 ```bash
-pnpm stack:up      # supabase start + redis up
-pnpm db:reset
+# 1. Paste 0000 + 0001 SQL into dev Supabase project.
+# 2. Locally:
+pnpm install
+pnpm db:truncate    # safe-noop if empty
 pnpm db:seed
-pnpm dev &
+pnpm dev:backend &  # backend runs locally pointed at dev Supabase
+pnpm dev:web &      # web runs locally pointed at dev Supabase + local backend
 sleep 5
-pnpm smoke
+pnpm smoke --env=dev
 pnpm test:audit
 pnpm test:rbac
-pnpm test          # vitest unit suite
+pnpm test           # vitest unit suite
 pnpm typecheck
 pnpm lint
 ```
 
 ### Test gate (must all pass to open Phase 1)
-- [ ] `pnpm typecheck` green
-- [ ] `pnpm lint` green
-- [ ] `pnpm test` green
-- [ ] `pnpm smoke` returns 0
+- [ ] `pnpm typecheck && pnpm lint && pnpm test` green
+- [ ] `pnpm smoke --env=dev` returns 0 (both Vercel and Cloud Run healthy)
 - [ ] `pnpm test:audit` returns 0
 - [ ] `pnpm test:rbac` returns 0
-- [ ] `pnpm db:reset && pnpm db:seed` runs cleanly on a fresh container
+- [ ] `0000_extensions.sql` + `0001_phase0_foundation.sql` applied cleanly in dev Supabase project; tables visible in Table Editor
+- [ ] Frontend can read `events_public` from the browser (RLS-permitted)
+- [ ] Backend rejects requests without a valid Supabase JWT
 
 ### Non-negotiables
-- No mutation function exists outside `withAudit`. You should be able to grep for raw `prisma.something.create` in the domain layer and find nothing — they all go through `withAudit`.
-- The `audit_logs` table is **append-only**. No domain code calls `update` or `delete` on it.
+- No mutation function exists outside `withAudit`. Grep `apps/backend/src` for direct `db.insert`/`db.update` outside the `withAudit` wrapper — there should be none in domain code.
+- The `audit_logs` table is **append-only**. No domain code calls `update` or `delete` on it (also revoked at the SQL level for non-service-role).
+- The `service_role` key never reaches the browser. It's only in GCP Secret Manager and Vercel's server-side env vars.
 
 ---
 
@@ -359,81 +647,95 @@ pnpm smoke
 
 ---
 
-## Phase 2 — Identity, OTP, check-in (Day 3, 14 May)
+## Phase 2 — Identity, Supabase Auth, check-in (Day 3, 14 May)
 
 ### What we're building
-Attendees can register with an email, get an OTP in their inbox (locally: Supabase's bundled Inbucket on `http://localhost:54324`), enter the app **before** verifying (so the desk line keeps moving), and verify later for prize eligibility. Auto-check-in fires on first event-day entry. Email is canonical and immutable.
+Attendees enter the app instantly as **anonymous Supabase users** (so the desk line moves), then upgrade to a verified email user by entering an OTP delivered via **Resend → Supabase Auth**. Session stays logged in for **24 hours**. Auto-check-in fires on first event-day entry. Email is canonical and immutable.
 
-### Files & DB tables
-- New files:
-  - `apps/web/app/[eventSlug]/join/page.tsx` — signup form
-  - `apps/web/app/[eventSlug]/verify/page.tsx` — OTP entry
-  - `packages/domain/identity.ts` — OTP issue/verify, signup, check-in
-  - `packages/domain/session.ts` — iron-session wrapper
-- DB tables:
-  - `attendees` (id, event_id, user_id, email, real_name, business_name, phone, alias, is_verified, checked_in_at, competition_score int default 0, spendable_balance int default 0, reached_current_score_at timestamptz)
-  - `pending_scans` (id, session_id, qr_code_id, created_at) — for pre-signup scans we replay later
+> We drop the custom OTP code entirely. Supabase Auth handles OTP issue, verify, rate-limit, lockout, JWT, and refresh.
+
+### SQL to paste
+Write and paste `supabase/sql/0003_phase2_identity.sql`:
+- `attendees` (event_id, user_id, email, real_name, business_name, phone, alias, is_verified, checked_in_at, competition_score, spendable_balance, reached_current_score_at)
+- `pending_scans` (auth_user_id, qr_code_id, created_at) — survives the anon-to-verified upgrade because `auth_user_id` stays the same
+- Trigger: when `auth.users.is_anonymous` flips from `true` to `false`, set `attendees.is_verified = true` and fire an "identity_verified" audit row
+- RLS: `attendees` has a `select` policy where `auth_user_id = auth.uid()` so each attendee can read **only their own** row from the browser; writes still go through the GCP backend
+
+### Supabase Dashboard config (one-time per project)
+This is the actual config — already covered in Part 4, called out again here since it lands in Phase 2:
+
+- **Authentication → Providers → Email**: enable Email OTP, OTP length 6, expiry 600s.
+- **Authentication → Providers → Anonymous sign-ins**: enable.
+- **Authentication → Sessions**: JWT expiry 3600s, refresh token TTL **86400s (24h)**, rotation on.
+- **Authentication → SMTP**: custom SMTP via Resend (Part 3.3 already done).
+- **Authentication → Rate Limits**: confirm OTP issue rate limit (default: 360/hour per IP; tighten per attendee via Upstash if needed).
 
 ### How to build it
-1. **Signup form.** Single-screen mobile form: email, real name, business name, phone. On submit, creates `users` + `attendees` row, opens a session (`is_verified=false`), and triggers OTP issue.
-2. **OTP issue.** Generate 6 digits with `crypto.randomInt`. Hash with SHA-256. Store in Redis: `otp:{event_id}:{email}` → `{ hash, attempts: 0 }`, TTL 600 s. Send via the email module (locally: SMTP to Inbucket on `localhost:54325`; production: Resend). Inbucket's web UI on `http://localhost:54324` shows every message instantly.
-3. **OTP verify.** Compare hash, increment attempts on miss. 5 misses → 15-min lockout key in Redis (`otp:lock:{event_id}:{email}`). On success, set `is_verified=true`, delete OTP key.
-4. **Session.** Iron-session, HttpOnly + Secure (Secure off in dev). Cookie payload: `{ attendeeId, eventId, isVerified }`. TTL 12 h, refreshed on every request during event day.
-5. **Pre-signup scan replay.** Browser gets an anonymous `session_id` cookie. If the user hits a `/scan/X` route before signing up, we record `pending_scans (session_id, qr_code_id)`. On signup, we replay: read all pending_scans for the session_id, replay each through the (yet-to-be-built) scoring engine, then delete the rows.
-6. **Auto-check-in.** Middleware checks: event is in `event_day` AND attendee is logged in AND `checked_in_at IS NULL` → set `checked_in_at = now()`. Runs once.
-7. **Rate limits.** Three OTP issues per email per 15 min, enforced in Redis via a sliding window.
+
+1. **Anonymous sign-in on first hit.** In `apps/web/app/[eventSlug]/layout.tsx`, on first load: if `supabase.auth.getSession()` is null, call `supabase.auth.signInAnonymously()`. The user now has an `auth_user_id` and a JWT. The session cookie is stored by `@supabase/ssr` and refreshes silently.
+2. **Create the `attendees` row.** The backend exposes `POST /attendees/upsert` that takes `{ event_id, real_name?, business_name?, phone? }`, finds-or-creates an `attendees` row keyed by `(event_id, auth_user_id)`. Called once after anonymous sign-in.
+3. **The signup form.** Single-screen mobile form: email (required), real name, business name, phone. On submit, browser calls `supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })`. Resend delivers the 6-digit code.
+4. **OTP entry.** Single input. Browser calls `supabase.auth.verifyOtp({ email, token, type: 'email' })`. On success, the anonymous user is upgraded in-place to a verified email user (same `auth.users.id`). The trigger flips `attendees.is_verified = true`.
+5. **Email immutability.** Backend `POST /attendees/update` validates that `email` is **not** in the payload (or returns 403). At the SQL level, RLS denies writes; only service-role can update, and the backend domain layer refuses email changes.
+6. **Auto-check-in.** Backend middleware: on every authenticated request, if `event.lifecycle_state = 'event_day'` and `attendees.checked_in_at IS NULL`, set `checked_in_at = now()` in a single `update ... where checked_in_at is null` (idempotent under concurrent requests).
+7. **24-hour session.** Already configured in Supabase (Part 4). The `supabase-js` client auto-refreshes the access token using the refresh token. No app code needed.
+8. **Pre-signup scan capture.** When an anonymous user hits `/scan/<code>`, the backend records `pending_scans(auth_user_id, qr_code_id)`. Because the upgrade to verified keeps the same `auth_user_id`, **no replay is needed** — at scoring time we treat verified and unverified the same, except we tag the award with `is_verified` so we can compute prize eligibility at archive time.
 
 ### Scripts to create
-1. **[scripts/seed-attendees.ts](../scripts/seed-attendees.ts)** — seeds 20 attendees with verified emails so other phases have data to work with.
-2. **[scripts/inbucket-fetch-otp.ts](../scripts/inbucket-fetch-otp.ts)** — utility: takes an email, queries the Inbucket API (`http://localhost:54324/api/v1/mailbox/<inbox>`), parses the latest message body, returns the 6-digit OTP. Used by every later end-to-end script.
-3. **[scripts/test-otp-flow.ts](../scripts/test-otp-flow.ts)** — full happy path: signup → fetch OTP from Inbucket → verify → assert `is_verified=true`.
-4. **[scripts/test-otp-rate-limit.ts](../scripts/test-otp-rate-limit.ts)** — issues 4 OTPs for the same email, asserts the 4th is rate-limited.
-5. **[scripts/test-otp-lockout.ts](../scripts/test-otp-lockout.ts)** — issues an OTP, submits 6 wrong codes, asserts lockout key is set, asserts further verify returns "locked".
-6. **[scripts/test-checkin.ts](../scripts/test-checkin.ts)** — sets event lifecycle to `event_day`, simulates an attendee request, asserts `checked_in_at` is set, simulates a second request, asserts `checked_in_at` did not change.
-7. **[scripts/test-email-immutability.ts](../scripts/test-email-immutability.ts)** — tries to PATCH an attendee email via the tRPC endpoint, asserts 403.
-8. **[scripts/test-presignup-replay.ts](../scripts/test-presignup-replay.ts)** — creates a session_id, calls `/scan/<test-qr>` while logged out, asserts `pending_scans` has a row. Signs up. Asserts the row is gone and (once Phase 5 lands) the score is awarded — for now just assert the row is consumed.
+1. **[scripts/seed-attendees.ts](../scripts/seed-attendees.ts)** — uses the Supabase Admin API (`supabase.auth.admin.createUser`) to create 20 verified attendees and their `attendees` rows. Idempotent.
+2. **[scripts/test-supabase-auth-flow.ts](../scripts/test-supabase-auth-flow.ts)** — full happy path: anonymous sign-in → upsert attendee → request OTP → fetch from **Resend's API** (`GET /emails/<id>` once Resend webhook fires, or use Resend's recent-emails endpoint) → verify OTP → assert `is_verified=true` and `auth_user_id` unchanged.
+3. **[scripts/test-24h-session.ts](../scripts/test-24h-session.ts)** — issues an access token, fast-forwards Vitest fake clock 23h, asserts a refresh succeeds; 25h, asserts refresh fails.
+4. **[scripts/test-checkin.ts](../scripts/test-checkin.ts)** — set event to `event_day`, call a backend route as an attendee, assert `checked_in_at` set; second call, assert unchanged.
+5. **[scripts/test-email-immutability.ts](../scripts/test-email-immutability.ts)** — call `POST /attendees/update` with an `email` field, assert 403.
+6. **[scripts/test-anon-to-verified.ts](../scripts/test-anon-to-verified.ts)** — sign in anonymously, capture `auth_user_id`, verify with OTP, assert same `auth_user_id` and `is_verified` now true.
+7. **[scripts/test-presignup-scan.ts](../scripts/test-presignup-scan.ts)** — anon scan, sign up + verify, assert the scan is attributed to the now-verified attendee with no replay step.
 
 `package.json` additions:
 ```json
-"test:otp": "tsx scripts/test-otp-flow.ts",
-"test:otp:ratelimit": "tsx scripts/test-otp-rate-limit.ts",
-"test:otp:lockout": "tsx scripts/test-otp-lockout.ts",
+"test:auth": "tsx scripts/test-supabase-auth-flow.ts",
+"test:session-24h": "tsx scripts/test-24h-session.ts",
 "test:checkin": "tsx scripts/test-checkin.ts",
 "test:email-immutable": "tsx scripts/test-email-immutability.ts",
-"test:presignup": "tsx scripts/test-presignup-replay.ts"
+"test:anon-to-verified": "tsx scripts/test-anon-to-verified.ts",
+"test:presignup": "tsx scripts/test-presignup-scan.ts"
 ```
 
 ### How to test it
 ```bash
-pnpm db:reset && pnpm db:seed
-tsx scripts/seed-events.ts
-pnpm dev &
+# Paste 0003_phase2_identity.sql into dev Supabase project first.
+pnpm db:truncate && pnpm db:seed
+tsx scripts/seed-attendees.ts
+pnpm dev:backend &
+pnpm dev:web &
 sleep 5
-pnpm test:otp
-pnpm test:otp:ratelimit
-pnpm test:otp:lockout
+pnpm test:auth
+pnpm test:session-24h
+pnpm test:anon-to-verified
 pnpm test:checkin
 pnpm test:email-immutable
 pnpm test:presignup
 ```
 
-Manual smoke (do this once):
-- Open `http://localhost:3000/sge-2026/join`, sign up with `test@example.com`.
-- Open `http://localhost:54324` (Inbucket), copy the OTP from the email body.
-- Paste OTP. Verify session is verified.
-- Close the tab. Reopen. You should still be logged in.
+Manual smoke (do once):
+- Open the deployed dev URL `/sge-2026/join` on your phone.
+- You're already logged in anonymously — no friction.
+- Enter your real email, request OTP. Email arrives via Resend within seconds.
+- Paste OTP. Now verified.
+- Close the tab, reopen 12 hours later — still logged in.
 
 ### Test gate
-- [ ] OTP issue → Inbucket has the email → verify works.
-- [ ] 4th OTP request inside 15 min is blocked.
-- [ ] 6 wrong codes lock out for 15 min.
-- [ ] First event-day entry sets `checked_in_at`. Second entry does not change it.
-- [ ] Email change attempt returns 403.
-- [ ] Pre-signup scan row is preserved through signup and consumed after.
+- [ ] Anonymous sign-in happens silently on first app entry.
+- [ ] OTP delivered via Resend (verify in Resend → Logs).
+- [ ] Verification upgrades the anonymous user in place (same `auth_user_id`).
+- [ ] Refresh token TTL of 24h: user is not logged out within that window.
+- [ ] First event-day request sets `checked_in_at`; second call does not change it.
+- [ ] `email` field in any `POST /attendees/update` payload is rejected.
+- [ ] A pre-verification scan is correctly attributed to the same attendee after verification.
 
 ### Non-negotiables
-- App entry works **before** OTP verification. The desk line cannot wait on email delivery.
-- Email immutability is enforced at the domain layer, not just the UI.
+- App entry works **before** OTP verification (anonymous sign-in handles this).
+- Email immutability enforced server-side and at the SQL trigger level.
+- Session lifetime is 24 hours — refresh tokens are configured at the Supabase project level, not in app code.
 
 ---
 
@@ -1007,24 +1309,34 @@ pnpm uat
 
 ---
 
-# Part 3 — Deployment (deferred)
+# Part 8 — Production cutover
 
-Deployment is **not in scope for this document**. We come back to this only after Phase 9's `pnpm uat` exits 0 on a clean laptop run.
+Because we develop against real cloud (dev Supabase + dev Vercel + dev GCP) from day one, "going to production" is not a giant migration. It is a controlled **promotion**: same code, same SQL, against the prod set of projects.
 
-When that happens, we will write a separate doc covering:
+## 8.1 Production projects to create (once, ahead of cutover)
 
-- Target environment (Cloud Run for the app + worker on GCP, **Supabase Cloud for Postgres + Storage**, Memorystore or Upstash for Redis)
-- Supabase project setup (staging + production), connection pooling via Supavisor, Point-in-Time Recovery
-- The Prisma migration story against Supabase Cloud (`DIRECT_URL` for migrations, `DATABASE_URL` through the pooler for the app)
-- Staging vs production isolation (separate Supabase projects, separate GCP projects)
-- CI/CD pipeline (GitHub Actions + Cloud Build)
-- Secret management
-- Scaling configuration
-- Monitoring and alerting
-- Pre-event runbook (T-48h, T-24h, T-0)
-- Backup and disaster recovery
+| Service | Dev project | Prod project |
+|---|---|---|
+| Supabase | `salesgeek-dev` | `salesgeek-prd` |
+| Vercel | `salesgeek` (Preview + Production envs) | same project, prod branch is `main` |
+| GCP | `salesgeek-dev` | `salesgeek-prd` |
+| Upstash Redis | `salesgeek-dev-redis` | `salesgeek-prd-redis` |
+| Resend | shared, same sending domain (`mail.salesgeek.scot`) | same |
 
-Until then: **do not provision cloud resources.** All work happens on the laptop.
+## 8.2 Promotion steps
+
+1. **Apply all SQL files to the prod Supabase project** in order (`0000` → `0010`). Verify in Table Editor.
+2. **Configure prod Supabase Auth** exactly as dev: Email OTP, anonymous sign-in enabled, Resend SMTP, 24-hour refresh TTL, redirect allow-list points at `app.salesgeek.scot`.
+3. **Deploy the backend to prod Cloud Run.** Same image tag as the green dev deploy. Bind prod secrets from Secret Manager.
+4. **Point Cloudflare `api.salesgeek.scot`** at the prod Cloud Run URL.
+5. **Promote Vercel to production.** Merge to `main`. Vercel auto-deploys. `app.salesgeek.scot` resolves.
+6. **Smoke test prod.** `pnpm smoke --env=prd`. Run the full Playwright happy-path against prod.
+7. **Seed minimum prod data.** Real event (`sge-2026`), real admin/staff accounts, real businesses, real reward catalog. Done via dashboard-only or `scripts/seed-prod-event.ts` running locally with prod env vars (extreme care: refuses if `--confirm` not passed).
+8. **Pre-event freeze.** No code merges in the 48 hours before event day except incident fixes.
+
+## 8.3 Day-of operations (separate runbook)
+
+The detailed event-day playbook (T-48h, T-24h, T-2h, T-0, escalation rota) is intentionally out of this doc. It belongs in `Docs/event-day-runbook.md`, written once Phase 9 is green.
 
 ---
 
@@ -1034,11 +1346,12 @@ By the end of the build, your `scripts/` folder looks like this:
 
 ```
 scripts/
-├── db-reset.ts
+├── db-truncate.ts
 ├── smoke.ts
 ├── full-uat.ts
 ├── load-summary.ts
 ├── security-check.ts
+├── gen-types.sh
 ├── seed-base.ts
 ├── seed-events.ts
 ├── seed-attendees.ts
@@ -1046,7 +1359,6 @@ scripts/
 ├── seed-content.ts
 ├── seed-qrs.ts
 ├── seed-rewards.ts
-├── inbucket-fetch-otp.ts
 ├── simulate-calendly-webhook.ts
 ├── run-worker-locally.ts
 ├── test-audit.ts
@@ -1055,12 +1367,12 @@ scripts/
 ├── test-lifecycle.ts
 ├── test-branding.ts
 ├── test-slug-404.ts
-├── test-otp-flow.ts
-├── test-otp-rate-limit.ts
-├── test-otp-lockout.ts
+├── test-supabase-auth-flow.ts
+├── test-24h-session.ts
+├── test-anon-to-verified.ts
 ├── test-checkin.ts
 ├── test-email-immutability.ts
-├── test-presignup-replay.ts
+├── test-presignup-scan.ts
 ├── test-agenda-status.ts
 ├── test-sponsor-interest.ts
 ├── test-faq-search.ts
@@ -1114,35 +1426,37 @@ tests/
 
 Every script is a single-purpose, idempotent, exit-code-driven check. They are how we know we shipped what we said we'd ship.
 
-# Appendix B — Phase calendar at a glance (local-only)
+# Appendix B — Phase calendar at a glance
 
 | Day | Date | Phase | What "done" looks like |
 |---|---|---|---|
-| 1 | Tue 12 May | Phase 0 | `pnpm smoke` returns 0 |
-| 2 | Wed 13 May | Phase 1 | `pnpm test:isolation && pnpm test:lifecycle` green |
-| 3 | Thu 14 May | Phase 2 | Signup + OTP via Inbucket works manually and in scripts |
-| 4–6 | Fri–Sun 15–17 May | Phase 3 | Five-tab IA visible, content CRUD works |
-| 7 | Mon 18 May | Phase 4 | Business QR auto-created, signed, immutable |
-| 8–11 | Tue–Fri 19–22 May | Phase 5 | 100-parallel scan test passes, leaderboard is anonymous |
-| 11–12 | Fri–Sat 22–23 May | Phase 6 | William webhook completes the redemption; oversell test passes |
-| 13 | Sun 24 May | Phase 7 | Broadcast in 30 s, ops dashboard reconciles |
-| 14 | Mon 25 May | Phase 8 | Real-time exports + archive controls work |
-| 14 | Mon 25 May | Phase 9 | `pnpm uat` exits 0 |
-| 15 | Tue 26 May | — | **(Deployment plan begins separately only after Phase 9 is green)** |
+| 1 | Tue 12 May | Phase 0 | Vercel + Cloud Run + dev Supabase all respond on `/health`; SQL `0000` + `0001` applied |
+| 2 | Wed 13 May | Phase 1 | Slug routing works; lifecycle transitions tested; SQL `0002` applied |
+| 3 | Thu 14 May | Phase 2 | Anon sign-in → OTP via Resend → 24h session round-trip; SQL `0003` applied |
+| 4–6 | Fri–Sun 15–17 May | Phase 3 | Five-tab IA visible, content CRUD works; SQL `0004` applied |
+| 7 | Mon 18 May | Phase 4 | Business QR auto-created, signed, immutable; SQL `0005` + `0010` (storage) applied |
+| 8–11 | Tue–Fri 19–22 May | Phase 5 | 100-parallel scan test passes, leaderboard is anonymous; SQL `0006` applied |
+| 11–12 | Fri–Sat 22–23 May | Phase 6 | William webhook completes redemption; oversell test passes; SQL `0007` applied |
+| 13 | Sun 24 May | Phase 7 | Realtime notifications + ops dashboard; SQL `0008` applied |
+| 14 | Mon 25 May | Phase 8 | Real-time exports + archive controls work; SQL `0009` applied |
+| 14 | Mon 25 May | Phase 9 | Load + security + UAT green |
+| 15 | Tue 26 May | — | **Production cutover (Part 8) — event day** |
 
-# Appendix C — Glossary (because some of this gets jargon-heavy)
+# Appendix C — Glossary
 
 - **Idempotent.** Same input, same outcome — calling the function twice does not produce two awards.
 - **Audit row.** A line in the `audit_logs` table that says "this actor did this thing at this time, here's the payload". Never updated, never deleted.
 - **Ledger.** A running balance. We have two: `competition_score` (for the leaderboard) and `spendable_balance` (for redemptions).
 - **HMAC.** A signature using a shared secret. Stops an attacker from making up QR URLs.
-- **Inbucket.** A local fake email inbox bundled with the Supabase CLI stack (web UI on `:54324`). Every email the app sends in dev lands there — no real emails go out.
-- **Supabase CLI.** A tool that runs a full Supabase stack (Postgres, Studio, Inbucket, Storage) locally in Docker. Production parity on a laptop.
-- **Supabase Studio.** The web UI for inspecting and editing the database (`http://localhost:54323`). Schema changes still go through Prisma migrations — Studio is read-mostly for us.
-- **k6.** A load testing tool. We run it against `localhost`.
-- **Playwright.** A browser automation tool. We script real user flows with it.
+- **RLS (Row Level Security).** Postgres feature that enforces per-row access at the database level. We enable it on every table; the GCP backend uses the service-role key (bypasses RLS), the browser uses the anon/authenticated keys (subject to RLS).
+- **Anonymous sign-in.** Supabase Auth feature that gives an unverified user a `auth.users` row + JWT immediately. Lets us keep the desk line moving and upgrade to verified on OTP.
+- **Realtime.** Supabase service that streams Postgres row changes to subscribed browsers via WebSocket. We use it to push notifications and score updates without polling.
+- **Resend.** Transactional email provider. Powers both Supabase Auth OTP emails (via SMTP) and our app's non-auth emails (via API).
+- **Service-role key.** Supabase's "god mode" key that bypasses RLS. Only ever lives in GCP Secret Manager and Vercel server-side env vars.
+- **k6.** Load testing tool. We run it against the dev cloud stack in Phase 9.
+- **Playwright.** Browser automation. We script real user flows against the deployed dev URL.
 - **Test gate.** The list of test cases that must pass for the phase to count as "done". No exceptions.
 
 ---
 
-*End of local-first phased implementation plan.*
+*End of phased implementation plan.*
