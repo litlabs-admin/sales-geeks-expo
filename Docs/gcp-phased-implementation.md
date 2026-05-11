@@ -34,7 +34,8 @@ Install these once. If you already have them, skip.
 |---|---|---|
 | Node.js | 20.x LTS | Runs Next.js and the worker |
 | pnpm | 9.x | Package manager (faster than npm, monorepo-friendly) |
-| Docker Desktop or OrbStack | latest | Runs Postgres, Redis, MailHog locally |
+| Docker Desktop or OrbStack | latest | Container runtime — Supabase CLI and Redis run on top of it |
+| Supabase CLI | 1.x latest | Spins up a full local Supabase stack (Postgres + Studio + Inbucket email) |
 | Git | any recent | Source control |
 | `psql` client | 15.x | Poke the database directly when debugging |
 | A code editor | VS Code / Cursor / similar | Day-to-day work |
@@ -51,30 +52,43 @@ brew install libpq && brew link --force libpq
 
 # OrbStack (lighter than Docker Desktop)
 brew install --cask orbstack
+
+# Supabase CLI
+brew install supabase/tap/supabase
 ```
 
-That's it. Everything else runs in Docker.
+That's it. Everything else runs in containers managed by Supabase CLI or our small Docker Compose file (which now only holds Redis).
 
 ## 1.2 What runs locally
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Your laptop                                            │
-│                                                         │
-│   pnpm dev (Next.js on http://localhost:3000)           │
-│   pnpm dev:worker (background jobs)                     │
-│                                                         │
-│   ┌──────────────────────────────────────────────────┐  │
-│   │  Docker Compose                                  │  │
-│   │   - postgres   :5432  (the database)             │  │
-│   │   - redis      :6379  (cache + rate limit)       │  │
-│   │   - mailhog    :8025  (fake email inbox in web)  │  │
-│   └──────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  Your laptop                                                     │
+│                                                                  │
+│   pnpm dev (Next.js on http://localhost:3000)                    │
+│   pnpm dev:worker (background jobs)                              │
+│                                                                  │
+│   ┌────────────────────────────────────────────────────────────┐ │
+│   │  Supabase CLI (`supabase start` — bundle of containers)    │ │
+│   │   - postgres        :54322  (the database)                 │ │
+│   │   - studio (web UI) :54323  (DB browser, table editor)     │ │
+│   │   - kong/api gw     :54321  (REST + Storage + Auth gw)     │ │
+│   │   - inbucket        :54324  (fake email inbox, web UI)     │ │
+│   │   - storage         (via :54321) (file uploads — optional) │ │
+│   └────────────────────────────────────────────────────────────┘ │
+│                                                                  │
+│   ┌────────────────────────────────────────────────────────────┐ │
+│   │  Docker Compose (we own this — just Redis)                 │ │
+│   │   - redis           :6379   (cache, rate limit, queue)     │ │
+│   └────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-- **MailHog** is a fake SMTP server with a web UI on `http://localhost:8025`. Every email the app "sends" (OTPs, magic links) appears there. No real emails go out locally. No Resend account needed for local development.
-- No GCP, no cloud, no internet dependency for the core loop.
+- **Supabase CLI** runs the exact same Postgres version (15) as Supabase Cloud, so we get production parity. It also runs **Inbucket**, a fake SMTP server with a web UI on `http://localhost:54324` — every email the app sends (OTPs, magic links) lands there. No real emails go out locally. No Resend account needed for development.
+- **Studio** at `http://localhost:54323` is the Supabase UI — useful for poking the DB without `psql`.
+- **Redis is not part of Supabase.** We keep it in a tiny `docker-compose.yml` of our own. It's still required (idempotency keys, rate limits, the local job queue).
+- Prisma is still our ORM. We use Supabase as a managed Postgres — we are **not** using Supabase Auth, Realtime, or Edge Functions (the spec calls for a custom OTP/magic-link flow). Supabase Storage is optional and used in Phase 4 for sponsor logos / QR PNG exports.
+- No cloud, no internet dependency for the core loop.
 
 ## 1.3 One-time bootstrap
 
@@ -86,27 +100,47 @@ git clone <repo-url> sales-geek-expo
 cd sales-geek-expo
 pnpm install
 
-# 2. start the local services (Postgres, Redis, MailHog)
+# 2. start Supabase locally (Postgres + Studio + Inbucket)
+#    This pulls images the first time — give it a few minutes.
+supabase start
+
+# 3. start Redis (our own tiny compose file)
 docker compose -f infra/docker/docker-compose.yml up -d
 
-# 3. copy env template
+# 4. copy env template
+#    `supabase start` prints connection strings at the end — paste them here.
 cp .env.example .env.local
 
-# 4. run migrations and seed
-pnpm db:reset
+# 5. run migrations and seed
+pnpm db:reset      # wraps `supabase db reset` + Prisma migrate
 pnpm db:seed
 
-# 5. start the app and worker in two terminals
-pnpm dev          # terminal 1
-pnpm dev:worker   # terminal 2
+# 6. start the app and worker in two terminals
+pnpm dev           # terminal 1
+pnpm dev:worker    # terminal 2
 
-# 6. open the app
+# 7. open the app
 open http://localhost:3000/sge-2026
-# open the fake email inbox in another tab
-open http://localhost:8025
+# fake email inbox (Inbucket)
+open http://localhost:54324
+# Supabase Studio (DB browser)
+open http://localhost:54323
 ```
 
 If those commands work, your laptop is ready and you can move to Phase 1.
+
+**Useful Supabase CLI commands you'll learn quickly:**
+
+```bash
+supabase start              # boot the local stack
+supabase stop               # shut it down
+supabase status             # show URLs, keys, ports
+supabase db reset           # nuke + re-run all migrations + run seed.sql
+supabase migration new <n>  # create a new migration file
+supabase db diff -f <name>  # generate a migration from schema changes
+```
+
+We use `supabase db reset` for raw schema, and Prisma migrations on top for app-level schema management (see Phase 0 for the exact dance).
 
 ## 1.4 The pnpm scripts you'll live in
 
@@ -123,11 +157,19 @@ These go in the root `package.json`. Build them as part of Phase 0 — every lat
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "db:up": "docker compose -f infra/docker/docker-compose.yml up -d",
-    "db:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "redis:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "redis:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "stack:up": "pnpm supabase:start && pnpm redis:up",
+    "stack:down": "pnpm redis:down && pnpm supabase:stop",
     "db:reset": "tsx scripts/db-reset.ts",
     "db:seed": "tsx scripts/seed-base.ts",
-    "db:psql": "psql postgres://salesgeek:salesgeek@localhost:5432/salesgeek",
+    "db:psql": "supabase db psql",
+    "db:studio": "open http://localhost:54323",
+    "db:migrate": "pnpm --filter db prisma migrate dev",
+    "db:generate": "pnpm --filter db prisma generate",
     "smoke": "tsx scripts/smoke.ts"
   }
 }
@@ -159,7 +201,10 @@ The empty house. A monorepo that boots, has a database, runs migrations, has aud
   - `packages/domain/` — domain logic (we build into this every phase)
   - `packages/db/` — Prisma schema + client
   - `packages/contracts/` — Zod schemas, shared types
-  - `infra/docker/docker-compose.yml` — Postgres, Redis, MailHog
+  - `supabase/config.toml` — Supabase local stack config (generated by `supabase init`)
+  - `supabase/migrations/` — SQL migrations Supabase will run on `db reset` (we keep these in sync with Prisma; see "How to build it" step 5)
+  - `supabase/seed.sql` — optional raw SQL seed (we mostly use TS seed scripts instead)
+  - `infra/docker/docker-compose.yml` — Redis only
   - `.env.example` — template for env vars
 - DB tables (just enough to test the plumbing):
   - `events` (id, slug, name, lifecycle_state, starts_at, ends_at, brand_tokens jsonb)
@@ -170,23 +215,40 @@ The empty house. A monorepo that boots, has a database, runs migrations, has aud
 1. **Scaffold the monorepo.** Use pnpm workspaces + Turborepo. Root `pnpm-workspace.yaml` lists `apps/*` and `packages/*`.
 2. **Create the Next.js app.** `pnpm create next-app@14 apps/web --typescript --app --tailwind --eslint`. Strip the demo content.
 3. **Create the worker app.** A small `apps/worker/src/index.ts` that exposes `POST /jobs/:name` (we use it in Phase 7).
-4. **Create the Prisma package.** `packages/db/prisma/schema.prisma` with the three tables above. Generate client into `node_modules/@prisma/client`.
-5. **Set up the audit pattern.** In `packages/domain/audit.ts`, export a function `withAudit(tx, actor, action, target, reason, fn)` that wraps a Prisma transaction and writes an `audit_logs` row inside the same `$transaction`. Every mutation in later phases uses this wrapper.
-6. **Set up RBAC.** In `packages/domain/rbac.ts`, export `canDoAction(actor, action, resource)` and a tRPC middleware `requireRole(role)`.
-7. **Add the `/health` route.** `apps/web/app/health/route.ts` returning `{ ok: true, version: process.env.GIT_SHA ?? 'dev' }`.
-8. **Add Docker Compose.** Three services as in Part 1.
-9. **Add CI.** `.github/workflows/ci.yml` runs `pnpm typecheck && pnpm lint && pnpm test`. (CI runs on every push — that's a tool to keep us honest, not a deployment.)
+4. **Initialize Supabase locally.** In the repo root: `supabase init` (creates `supabase/config.toml`). Then `supabase start` to boot the stack. Copy the printed `DB URL`, `anon key`, and `service_role key` into `.env.local`. We do NOT use the anon/service keys for app auth (we keep our custom OTP) but Storage uses them in Phase 4.
+5. **Create the Prisma package.**
+    - `packages/db/prisma/schema.prisma` with the three tables above.
+    - Point Prisma at Supabase's local Postgres:
+      ```
+      DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=public
+      DIRECT_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres?schema=public
+      ```
+      (In production these split — `DATABASE_URL` goes through Supavisor pooler, `DIRECT_URL` is for migrations. Locally they're the same.)
+    - Run `pnpm db:migrate` to create the first migration. Prisma writes a SQL file to `packages/db/prisma/migrations/`.
+    - Mirror that SQL into `supabase/migrations/` so `supabase db reset` rebuilds the same schema (the `db-reset.ts` script in step 11 below handles this automatically). The Prisma migration is the source of truth; Supabase's migrations folder is a kept-in-sync copy.
+6. **Set up the audit pattern.** In `packages/domain/audit.ts`, export a function `withAudit(tx, actor, action, target, reason, fn)` that wraps a Prisma transaction and writes an `audit_logs` row inside the same `$transaction`. Every mutation in later phases uses this wrapper.
+7. **Set up RBAC.** In `packages/domain/rbac.ts`, export `canDoAction(actor, action, resource)` and a tRPC middleware `requireRole(role)`.
+8. **Add the `/health` route.** `apps/web/app/health/route.ts` returning `{ ok: true, version: process.env.GIT_SHA ?? 'dev' }`.
+9. **Add the Redis Docker Compose.** A `infra/docker/docker-compose.yml` with just a `redis:7-alpine` service on port 6379.
+10. **Add CI.** `.github/workflows/ci.yml` runs `pnpm typecheck && pnpm lint && pnpm test`. CI provisions a fresh Postgres via `postgres:15` service container (no Supabase needed in CI — Prisma migrations target plain Postgres).
+11. **A note on the Prisma + Supabase split.**
+    - **Prisma** owns the schema. Migrations live in `packages/db/prisma/migrations/`.
+    - **Supabase** locally just runs Postgres; we don't write tables via Supabase Studio.
+    - On `supabase db reset`, Supabase blanks the DB. We then immediately run `prisma migrate deploy` to re-apply Prisma migrations. This is the "dance" — `scripts/db-reset.ts` (below) handles it in one command.
 
 ### Scripts to create
 Create each of these as a real file. Numbers refer to file paths.
 
-1. **[scripts/db-reset.ts](../scripts/db-reset.ts)** — drops the DB, recreates it, runs migrations.
+1. **[scripts/db-reset.ts](../scripts/db-reset.ts)** — nukes Supabase's local Postgres, re-runs Prisma migrations, regenerates the Prisma client.
    ```ts
    // What it does:
-   //   1. docker compose exec postgres dropdb -U salesgeek salesgeek --if-exists
-   //   2. docker compose exec postgres createdb -U salesgeek salesgeek
-   //   3. pnpm --filter db prisma migrate deploy
-   //   4. logs "DB ready"
+   //   1. supabase db reset --no-seed              (blanks the local DB)
+   //   2. pnpm --filter db prisma migrate deploy   (applies Prisma migrations)
+   //   3. pnpm --filter db prisma generate         (regenerates the client)
+   //   4. flushes Redis (FLUSHDB) so idempotency keys don't survive across resets
+   //   5. logs "DB + Redis reset complete"
+   //
+   // We deliberately skip Supabase's own seed.sql — our TS seed scripts are richer.
    ```
 2. **[scripts/seed-base.ts](../scripts/seed-base.ts)** — minimum seed: one event (`sge-2026`), one admin user, one staff user.
 3. **[scripts/smoke.ts](../scripts/smoke.ts)** — pings `http://localhost:3000/health`, asserts 200, exits 0/1. This is the first time we have a single command that says "is the app up?".
@@ -206,7 +268,7 @@ Wire these into `package.json`:
 
 ### How to test it
 ```bash
-pnpm db:up
+pnpm stack:up      # supabase start + redis up
 pnpm db:reset
 pnpm db:seed
 pnpm dev &
@@ -300,7 +362,7 @@ pnpm smoke
 ## Phase 2 — Identity, OTP, check-in (Day 3, 14 May)
 
 ### What we're building
-Attendees can register with an email, get an OTP in their inbox (locally: MailHog), enter the app **before** verifying (so the desk line keeps moving), and verify later for prize eligibility. Auto-check-in fires on first event-day entry. Email is canonical and immutable.
+Attendees can register with an email, get an OTP in their inbox (locally: Supabase's bundled Inbucket on `http://localhost:54324`), enter the app **before** verifying (so the desk line keeps moving), and verify later for prize eligibility. Auto-check-in fires on first event-day entry. Email is canonical and immutable.
 
 ### Files & DB tables
 - New files:
@@ -314,7 +376,7 @@ Attendees can register with an email, get an OTP in their inbox (locally: MailHo
 
 ### How to build it
 1. **Signup form.** Single-screen mobile form: email, real name, business name, phone. On submit, creates `users` + `attendees` row, opens a session (`is_verified=false`), and triggers OTP issue.
-2. **OTP issue.** Generate 6 digits with `crypto.randomInt`. Hash with SHA-256. Store in Redis: `otp:{event_id}:{email}` → `{ hash, attempts: 0 }`, TTL 600 s. Send via the email module (locally: SMTP to MailHog on `localhost:1025`).
+2. **OTP issue.** Generate 6 digits with `crypto.randomInt`. Hash with SHA-256. Store in Redis: `otp:{event_id}:{email}` → `{ hash, attempts: 0 }`, TTL 600 s. Send via the email module (locally: SMTP to Inbucket on `localhost:54325`; production: Resend). Inbucket's web UI on `http://localhost:54324` shows every message instantly.
 3. **OTP verify.** Compare hash, increment attempts on miss. 5 misses → 15-min lockout key in Redis (`otp:lock:{event_id}:{email}`). On success, set `is_verified=true`, delete OTP key.
 4. **Session.** Iron-session, HttpOnly + Secure (Secure off in dev). Cookie payload: `{ attendeeId, eventId, isVerified }`. TTL 12 h, refreshed on every request during event day.
 5. **Pre-signup scan replay.** Browser gets an anonymous `session_id` cookie. If the user hits a `/scan/X` route before signing up, we record `pending_scans (session_id, qr_code_id)`. On signup, we replay: read all pending_scans for the session_id, replay each through the (yet-to-be-built) scoring engine, then delete the rows.
@@ -323,8 +385,8 @@ Attendees can register with an email, get an OTP in their inbox (locally: MailHo
 
 ### Scripts to create
 1. **[scripts/seed-attendees.ts](../scripts/seed-attendees.ts)** — seeds 20 attendees with verified emails so other phases have data to work with.
-2. **[scripts/mailhog-fetch-otp.ts](../scripts/mailhog-fetch-otp.ts)** — utility: takes an email, queries the MailHog API (`http://localhost:8025/api/v2/search`), parses the latest message body, returns the 6-digit OTP. Used by every later end-to-end script.
-3. **[scripts/test-otp-flow.ts](../scripts/test-otp-flow.ts)** — full happy path: signup → fetch OTP from MailHog → verify → assert `is_verified=true`.
+2. **[scripts/inbucket-fetch-otp.ts](../scripts/inbucket-fetch-otp.ts)** — utility: takes an email, queries the Inbucket API (`http://localhost:54324/api/v1/mailbox/<inbox>`), parses the latest message body, returns the 6-digit OTP. Used by every later end-to-end script.
+3. **[scripts/test-otp-flow.ts](../scripts/test-otp-flow.ts)** — full happy path: signup → fetch OTP from Inbucket → verify → assert `is_verified=true`.
 4. **[scripts/test-otp-rate-limit.ts](../scripts/test-otp-rate-limit.ts)** — issues 4 OTPs for the same email, asserts the 4th is rate-limited.
 5. **[scripts/test-otp-lockout.ts](../scripts/test-otp-lockout.ts)** — issues an OTP, submits 6 wrong codes, asserts lockout key is set, asserts further verify returns "locked".
 6. **[scripts/test-checkin.ts](../scripts/test-checkin.ts)** — sets event lifecycle to `event_day`, simulates an attendee request, asserts `checked_in_at` is set, simulates a second request, asserts `checked_in_at` did not change.
@@ -357,12 +419,12 @@ pnpm test:presignup
 
 Manual smoke (do this once):
 - Open `http://localhost:3000/sge-2026/join`, sign up with `test@example.com`.
-- Open `http://localhost:8025`, copy the OTP from the email body.
+- Open `http://localhost:54324` (Inbucket), copy the OTP from the email body.
 - Paste OTP. Verify session is verified.
 - Close the tab. Reopen. You should still be logged in.
 
 ### Test gate
-- [ ] OTP issue → MailHog has the email → verify works.
+- [ ] OTP issue → Inbucket has the email → verify works.
 - [ ] 4th OTP request inside 15 min is blocked.
 - [ ] 6 wrong codes lock out for 15 min.
 - [ ] First event-day entry sets `checked_in_at`. Second entry does not change it.
@@ -480,6 +542,11 @@ Admin creates a Business. The system auto-generates exactly one immutable QR for
 3. **QR signing.** `signature = HMAC_SHA256(QR_SIGNING_SECRET, event_id + ':' + code + ':' + type)`. Stored alongside the code. The URL is `/{eventSlug}/scan/{code}?sig={signature}`.
 4. **Staff-misc QR.** Staff UI has a constrained dropdown: `guest_speaker`, `ad_hoc_session`, `bonus_zone`. Mandatory `reason` field. Cannot pick `business`.
 5. **Print cards.** A small page renders a branded card (logo + QR PNG + name) using `@vercel/og` (Satori). Admin can download A5/A4 PDF. Bulk export zips up all cards for an event via `jszip`.
+6. **Asset storage via Supabase Storage.** Create two buckets in `supabase/config.toml`:
+    - `assets` — sponsor logos, geek photos, speaker headshots (signed URLs, 1h TTL).
+    - `qr-cards` — generated print PNG/ZIP exports.
+
+    Locally these live in Supabase's bundled storage container; in production we point at the same buckets on Supabase Cloud. The `@supabase/supabase-js` client (using the service-role key, server-side only) handles uploads.
 
 ### Scripts to create
 1. **[scripts/seed-businesses.ts](../scripts/seed-businesses.ts)** — creates 8 businesses; each gets one QR.
@@ -807,7 +874,7 @@ Admin can export everything (CSV/JSON) and the export always reflects the latest
   - `access_overrides` (id, event_id, attendee_id, granted_until, granted_by_user_id, reason, created_at)
 
 ### How to build it
-1. **Streaming CSV.** Use `pg-query-stream` with `COPY (SELECT ...) TO STDOUT WITH CSV HEADER`. Keeps memory flat.
+1. **Streaming CSV.** Use `pg-query-stream` with `COPY (SELECT ...) TO STDOUT WITH CSV HEADER`. Keeps memory flat. For large exports, stream the CSV into a Supabase Storage `exports` bucket and return a signed download URL; small exports stream straight to the response.
 2. **Consent filter.** Sponsor lead export's SQL has `WHERE consented = true AND undone_at IS NULL`. No application-layer filtering.
 3. **`as_of` timestamp.** The export records `now()` at the start of the query and stamps it in the response header and audit row.
 4. **Archive middleware.** When `event.lifecycle_state='post_event_archive'`, every mutating route returns 403 unless `actor.type='admin'`.
@@ -946,8 +1013,10 @@ Deployment is **not in scope for this document**. We come back to this only afte
 
 When that happens, we will write a separate doc covering:
 
-- Target environment (GCP — Cloud Run, Cloud SQL, Memorystore, etc.)
-- Staging vs production project isolation
+- Target environment (Cloud Run for the app + worker on GCP, **Supabase Cloud for Postgres + Storage**, Memorystore or Upstash for Redis)
+- Supabase project setup (staging + production), connection pooling via Supavisor, Point-in-Time Recovery
+- The Prisma migration story against Supabase Cloud (`DIRECT_URL` for migrations, `DATABASE_URL` through the pooler for the app)
+- Staging vs production isolation (separate Supabase projects, separate GCP projects)
 - CI/CD pipeline (GitHub Actions + Cloud Build)
 - Secret management
 - Scaling configuration
@@ -977,7 +1046,7 @@ scripts/
 ├── seed-content.ts
 ├── seed-qrs.ts
 ├── seed-rewards.ts
-├── mailhog-fetch-otp.ts
+├── inbucket-fetch-otp.ts
 ├── simulate-calendly-webhook.ts
 ├── run-worker-locally.ts
 ├── test-audit.ts
@@ -1051,7 +1120,7 @@ Every script is a single-purpose, idempotent, exit-code-driven check. They are h
 |---|---|---|---|
 | 1 | Tue 12 May | Phase 0 | `pnpm smoke` returns 0 |
 | 2 | Wed 13 May | Phase 1 | `pnpm test:isolation && pnpm test:lifecycle` green |
-| 3 | Thu 14 May | Phase 2 | Signup + OTP via MailHog works manually and in scripts |
+| 3 | Thu 14 May | Phase 2 | Signup + OTP via Inbucket works manually and in scripts |
 | 4–6 | Fri–Sun 15–17 May | Phase 3 | Five-tab IA visible, content CRUD works |
 | 7 | Mon 18 May | Phase 4 | Business QR auto-created, signed, immutable |
 | 8–11 | Tue–Fri 19–22 May | Phase 5 | 100-parallel scan test passes, leaderboard is anonymous |
@@ -1067,7 +1136,9 @@ Every script is a single-purpose, idempotent, exit-code-driven check. They are h
 - **Audit row.** A line in the `audit_logs` table that says "this actor did this thing at this time, here's the payload". Never updated, never deleted.
 - **Ledger.** A running balance. We have two: `competition_score` (for the leaderboard) and `spendable_balance` (for redemptions).
 - **HMAC.** A signature using a shared secret. Stops an attacker from making up QR URLs.
-- **MailHog.** A local fake email inbox we use in development. No real emails go out.
+- **Inbucket.** A local fake email inbox bundled with the Supabase CLI stack (web UI on `:54324`). Every email the app sends in dev lands there — no real emails go out.
+- **Supabase CLI.** A tool that runs a full Supabase stack (Postgres, Studio, Inbucket, Storage) locally in Docker. Production parity on a laptop.
+- **Supabase Studio.** The web UI for inspecting and editing the database (`http://localhost:54323`). Schema changes still go through Prisma migrations — Studio is read-mostly for us.
 - **k6.** A load testing tool. We run it against `localhost`.
 - **Playwright.** A browser automation tool. We script real user flows with it.
 - **Test gate.** The list of test cases that must pass for the phase to count as "done". No exceptions.
