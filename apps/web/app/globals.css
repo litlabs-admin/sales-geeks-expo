@@ -1,0 +1,18 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-primary: 18 110 130;
+  --brand-ink: 18 23 28;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: #f7f8f8;
+  color: rgb(var(--brand-ink));
+}

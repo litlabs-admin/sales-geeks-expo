@@ -1,0 +1,14 @@
+[storage.buckets.assets]
+public = false
+file_size_limit = "10MiB"
+allowed_mime_types = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"]
+
+[storage.buckets.qr-cards]
+public = false
+file_size_limit = "50MiB"
+allowed_mime_types = ["image/png", "application/zip"]
+
+[storage.buckets.exports]
+public = false
+file_size_limit = "100MiB"
+allowed_mime_types = ["text/csv", "application/json"]

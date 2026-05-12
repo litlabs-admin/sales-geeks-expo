@@ -1,0 +1,68 @@
+{
+  "name": "@sgexpo/domain",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./audit": {
+      "types": "./src/audit.ts",
+      "default": "./src/audit.ts"
+    },
+    "./archive": {
+      "types": "./src/archive.ts",
+      "default": "./src/archive.ts"
+    },
+    "./event-lifecycle": {
+      "types": "./src/event-lifecycle.ts",
+      "default": "./src/event-lifecycle.ts"
+    },
+    "./event-scope": {
+      "types": "./src/event-scope.ts",
+      "default": "./src/event-scope.ts"
+    },
+    "./exports": {
+      "types": "./src/exports.ts",
+      "default": "./src/exports.ts"
+    },
+    "./qr": {
+      "types": "./src/qr.ts",
+      "default": "./src/qr.ts"
+    },
+    "./qr-print": {
+      "types": "./src/qr-print.ts",
+      "default": "./src/qr-print.ts"
+    },
+    "./leaderboard": {
+      "types": "./src/leaderboard.ts",
+      "default": "./src/leaderboard.ts"
+    },
+    "./notifications": {
+      "types": "./src/notifications.ts",
+      "default": "./src/notifications.ts"
+    },
+    "./rbac": {
+      "types": "./src/rbac.ts",
+      "default": "./src/rbac.ts"
+    },
+    "./rewards": {
+      "types": "./src/rewards.ts",
+      "default": "./src/rewards.ts"
+    },
+    "./scoring": {
+      "types": "./src/scoring.ts",
+      "default": "./src/scoring.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.20.0",
+    "@typescript-eslint/parser": "^8.20.0",
+    "eslint": "^8.57.1",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
