@@ -1381,7 +1381,7 @@ Vercel server-side env, GCP Secret Manager (backend), Upstash and Supabase alrea
 4. Open prod Table Editor; confirm structure matches dev.
 5. Generate prod-side types — paste into `packages/contracts/db-types.prd.ts` for spot-check. Should be identical to dev's types.
 
-## Phase 10.3 — Deploy the backend to GCP Cloud Run (T-2 days)
+## Phase 10.3 — Deploy the backend to Docker on GCP Compute Engine (T-2 days)
 
 ```bash
 # Install gcloud CLI
@@ -1391,7 +1391,7 @@ gcloud config set project salesgeek-prd
 
 # Enable APIs
 gcloud services enable \
-  run.googleapis.com \
+  compute.googleapis.com \
   cloudbuild.googleapis.com \
   cloudscheduler.googleapis.com \
   cloudtasks.googleapis.com \
@@ -1411,26 +1411,21 @@ done
 # Build and push the backend image
 gcloud builds submit --tag europe-west2-docker.pkg.dev/salesgeek-prd/salesgeek/backend:v1 ./apps/backend
 
-# Deploy Cloud Run service
-gcloud run deploy backend \
-  --image europe-west2-docker.pkg.dev/salesgeek-prd/salesgeek/backend:v1 \
-  --region europe-west2 \
+# Create a Compute Engine VM with Container-Optimized OS
+gcloud compute instances create-with-container backend-vm \
+  --zone=europe-west2-a \
+  --machine-type=e2-micro \
+  --container-image=europe-west2-docker.pkg.dev/salesgeek-prd/salesgeek/backend:v1 \
+  --container-env=SUPABASE_SERVICE_ROLE_KEY=<secret>,DATABASE_URL=<secret>,REDIS_URL=<secret> \
+  --tags=http-server,https-server \
   --service-account=backend-runtime@salesgeek-prd.iam.gserviceaccount.com \
-  --min-instances=2 --max-instances=20 \
-  --cpu=1 --memory=1Gi --concurrency=80 \
-  --update-secrets=SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,\
-SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest,\
-DATABASE_URL=DATABASE_URL:latest,\
-DATABASE_POOL_URL=DATABASE_POOL_URL:latest,\
-REDIS_URL=REDIS_URL:latest,\
-RESEND_API_KEY=RESEND_API_KEY:latest,\
-QR_SIGNING_SECRET=QR_SIGNING_SECRET:latest,\
-CALENDLY_WEBHOOK_SECRET=CALENDLY_WEBHOOK_SECRET:latest,\
-BACKEND_SHARED_SECRET=BACKEND_SHARED_SECRET:latest \
-  --no-allow-unauthenticated
+  --scopes=https://www.googleapis.com/auth/cloud-platform
+
+# Expose port 80/443 on the VM firewall
+gcloud compute firewall-rules create allow-backend-http --allow tcp:80,tcp:443 --target-tags http-server,https-server
 ```
 
-Note the service URL (something like `https://backend-xxxx-ew.a.run.app`). Smoke it: `curl https://backend-xxxx-ew.a.run.app/health` (expect 401 — that's correct, it rejects unauthenticated; bypass with a signed test token).
+Note the external IP of the VM. Smoke it: `curl http://<VM_IP>/health` (expect 401 — that's correct, it rejects unauthenticated; bypass with a signed test token).
 
 ### Cron jobs
 
@@ -1438,14 +1433,15 @@ Note the service URL (something like `https://backend-xxxx-ew.a.run.app`). Smoke
 # Notifications due-poll — every minute
 gcloud scheduler jobs create http notifications-due \
   --schedule="* * * * *" --http-method=POST \
-  --uri=https://backend-xxxx-ew.a.run.app/jobs/notifications-due \
+  --uri=https://api.salesgeek.scot/jobs/notifications-due \
   --oidc-service-account-email=scheduler@salesgeek-prd.iam.gserviceaccount.com
 
 # William reconciler — every 5 minutes
 gcloud scheduler jobs create http william-reconcile \
   --schedule="*/5 * * * *" --http-method=POST \
-  --uri=https://backend-xxxx-ew.a.run.app/jobs/william-reconcile \
+  --uri=https://api.salesgeek.scot/jobs/william-reconcile \
   --oidc-service-account-email=scheduler@salesgeek-prd.iam.gserviceaccount.com
+
 
 # Archive transition + reward expiry — daily at 03:00 UTC
 gcloud scheduler jobs create http daily-maintenance \
@@ -1478,9 +1474,9 @@ Add a Cloudflare DNS record:
 
 | Record | Type | Value | Proxied? |
 |---|---|---|---|
-| `api` | CNAME | `<cloud-run-url>.a.run.app` | **Yes (proxied)** — enables Cloud Armor-style rules + DDoS at the edge |
+| `api` | A | `<VM_IP_ADDRESS>` | **Yes (proxied)** — enables Cloud Armor-style rules + DDoS at the edge |
 
-In Cloud Run, bind the custom domain `api.salesgeek.scot` via **Cloud Run → Domain Mappings**. Wait for the cert to issue.
+This will map `api.salesgeek.scot` to the Docker VM we created in GCP. Cloudflare will handle the SSL/TLS termination automatically, proxying traffic securely to the VM.
 
 ## Phase 10.5 — Post-deploy smoke and seed (T-1 day)
 
