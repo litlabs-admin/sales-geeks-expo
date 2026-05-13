@@ -7,5 +7,21 @@ services:
     volumes:
       - redis-data:/data
 
+  mailpit:
+    image: axllent/mailpit:v1.21
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  backend-healthcheck:
+    image: curlimages/curl:8.11.1
+    profiles: ["checks"]
+    command: ["sh", "-c", "curl -fsS http://host.docker.internal:8080/health"]
+
+  web-healthcheck:
+    image: curlimages/curl:8.11.1
+    profiles: ["checks"]
+    command: ["sh", "-c", "curl -fsS http://host.docker.internal:3000/health"]
+
 volumes:
   redis-data:

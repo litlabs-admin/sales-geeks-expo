@@ -21,6 +21,17 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   DATABASE_POOL_URL: z.string().url().optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
+  NEXT_PUBLIC_BACKEND_URL: z.string().url().optional(),
+  BACKEND_URL: z.string().url().optional(),
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .default("http://localhost:3000,http://localhost:3001")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    ),
   SUPABASE_JWT_SECRET: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   QR_SIGNING_SECRET: z.string().min(16),

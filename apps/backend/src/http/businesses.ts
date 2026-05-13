@@ -8,7 +8,6 @@ import {
   businessQrUrl,
   createQrCode,
   isQrType,
-  isStaffMiscQrType,
   matchingSignedQrType,
   qrPurposeFingerprint,
   signQr,
@@ -26,6 +25,9 @@ type Business = {
   name: string;
   contact_email: string | null;
   logo_url: string | null;
+  sponsor_tier: string | null;
+  website_url: string | null;
+  archived_at: string | null;
   created_at: string;
 };
 
@@ -44,6 +46,12 @@ type QrCode = {
   reason: string | null;
   purpose_fingerprint: string;
   active: boolean;
+  campaign_name: string | null;
+  status: string;
+  max_scans: number | null;
+  cooldown_seconds: number | null;
+  sponsor_id: string | null;
+  session_id: string | null;
   created_by_user_id: string | null;
   created_at: string;
 };
@@ -66,6 +74,28 @@ function optionalNumber(value: unknown, fallback: number) {
 
   if (!Number.isInteger(numberValue) || numberValue < 0) {
     throw new HTTPException(400, { message: "points must be a non-negative integer" });
+  }
+
+  return numberValue;
+}
+
+function optionalPositiveInt(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const numberValue = Number(value);
+
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw new HTTPException(400, { message: "value must be a positive integer" });
+  }
+
+  return numberValue;
+}
+
+function optionalNonNegativeInt(value: unknown) {
+  if (value === undefined || value === null || value === "") return null;
+  const numberValue = Number(value);
+
+  if (!Number.isInteger(numberValue) || numberValue < 0) {
+    throw new HTTPException(400, { message: "value must be a non-negative integer" });
   }
 
   return numberValue;
@@ -160,6 +190,10 @@ export async function assignBusinessQr(
 
 export async function listBusinesses(c: Context) {
   const eventId = c.req.query("event_id");
+  const search = c.req.query("q")?.trim();
+  const includeArchived = c.req.query("include_archived") === "true";
+  const limit = Math.min(Number(c.req.query("limit") ?? 50), 100);
+  const offset = Math.max(Number(c.req.query("offset") ?? 0), 0);
 
   if (!eventId) {
     throw new HTTPException(400, { message: "event_id is required" });
@@ -172,17 +206,26 @@ export async function listBusinesses(c: Context) {
       b.name,
       b.contact_email,
       b.logo_url,
+      b.sponsor_tier,
+      b.website_url,
+      b.archived_at,
       b.created_at,
       q.id as qr_id,
       q.code as qr_code,
-      q.signature as qr_signature
+      q.signature as qr_signature,
+      q.active as qr_active,
+      q.status as qr_status
     from public.businesses b
     left join public.qr_codes q
       on q.event_id = b.event_id
       and q.owner_type = 'business'
       and q.owner_id = b.id
     where b.event_id = ${eventId}
+      and (${includeArchived} or b.archived_at is null)
+      and (${search ?? null}::text is null or b.name ilike '%' || ${search ?? null} || '%')
     order by b.name asc
+    limit ${limit}
+    offset ${offset}
   `;
 
   return c.json({ businesses });
@@ -195,22 +238,29 @@ export async function createBusiness(c: Context) {
     name?: unknown;
     contact_email?: unknown;
     logo_url?: unknown;
+    sponsor_tier?: unknown;
+    website_url?: unknown;
   };
 
   const eventId = requiredString(body.event_id, "event_id");
   const name = requiredString(body.name, "name");
   const contactEmail = optionalString(body.contact_email);
   const logoUrl = optionalString(body.logo_url);
+  const sponsorTier = optionalString(body.sponsor_tier);
+  const websiteUrl = optionalString(body.website_url);
 
   const result = await sql.begin(async (tx) => {
     const businessRows = await tx<Business[]>`
-      insert into public.businesses (event_id, name, contact_email, logo_url)
-      values (${eventId}, ${name}, ${contactEmail}, ${logoUrl})
+      insert into public.businesses (event_id, name, contact_email, logo_url, sponsor_tier, website_url)
+      values (${eventId}, ${name}, ${contactEmail}, ${logoUrl}, ${sponsorTier}, ${websiteUrl})
       on conflict (event_id, name) do update
         set contact_email = excluded.contact_email,
             logo_url = excluded.logo_url,
+            sponsor_tier = excluded.sponsor_tier,
+            website_url = excluded.website_url,
+            archived_at = null,
             updated_at = now()
-      returning id, event_id, name, contact_email, logo_url, created_at
+      returning id, event_id, name, contact_email, logo_url, sponsor_tier, website_url, archived_at, created_at
     `;
     const business = businessRows[0];
 
@@ -230,6 +280,95 @@ export async function createBusiness(c: Context) {
   return c.json(result);
 }
 
+export async function updateBusiness(c: Context) {
+  const actor = c.get("actor") as Actor;
+  const id = requiredString(c.req.param("id"), "id");
+  const body = (await c.req.json().catch(() => ({}))) as {
+    name?: unknown;
+    contact_email?: unknown;
+    logo_url?: unknown;
+    sponsor_tier?: unknown;
+    website_url?: unknown;
+  };
+
+  const rows = await sql<Business[]>`
+    update public.businesses
+    set name = coalesce(${optionalString(body.name)}, name),
+        contact_email = case when ${body.contact_email !== undefined} then ${optionalString(body.contact_email)} else contact_email end,
+        logo_url = case when ${body.logo_url !== undefined} then ${optionalString(body.logo_url)} else logo_url end,
+        sponsor_tier = case when ${body.sponsor_tier !== undefined} then ${optionalString(body.sponsor_tier)} else sponsor_tier end,
+        website_url = case when ${body.website_url !== undefined} then ${optionalString(body.website_url)} else website_url end,
+        updated_at = now()
+    where id = ${id}
+      and archived_at is null
+    returning id, event_id, name, contact_email, logo_url, sponsor_tier, website_url, archived_at, created_at
+  `;
+
+  if (!rows[0]) {
+    throw new HTTPException(404, { message: "Business not found" });
+  }
+
+  await sql`
+    insert into public.audit_logs (
+      actor_user_id, actor_role, action, target_type, target_id, reason, metadata
+    )
+    values (
+      ${actor.id},
+      ${actor.role}::public.app_role,
+      'business.updated',
+      'business',
+      ${id},
+      'admin_business_update',
+      ${JSON.stringify({ business_id: id })}::jsonb
+    )
+  `;
+
+  return c.json({ business: rows[0] });
+}
+
+export async function archiveBusiness(c: Context) {
+  const actor = c.get("actor") as Actor;
+  const id = requiredString(c.req.param("id"), "id");
+  const rows = await sql<Business[]>`
+    update public.businesses
+    set archived_at = coalesce(archived_at, now()),
+        updated_at = now()
+    where id = ${id}
+    returning id, event_id, name, contact_email, logo_url, sponsor_tier, website_url, archived_at, created_at
+  `;
+
+  if (!rows[0]) {
+    throw new HTTPException(404, { message: "Business not found" });
+  }
+
+  await sql`
+    update public.qr_codes
+    set active = false,
+        status = 'disabled',
+        disabled_reason = coalesce(disabled_reason, 'Business archived'),
+        updated_at = now()
+    where owner_type = 'business'
+      and owner_id = ${id}
+  `;
+
+  await sql`
+    insert into public.audit_logs (
+      actor_user_id, actor_role, action, target_type, target_id, reason, metadata
+    )
+    values (
+      ${actor.id},
+      ${actor.role}::public.app_role,
+      'business.archived',
+      'business',
+      ${id},
+      'admin_business_archive',
+      ${JSON.stringify({ business_id: id })}::jsonb
+    )
+  `;
+
+  return c.json({ business: rows[0] });
+}
+
 export async function createMiscQr(c: Context) {
   const actor = c.get("actor") as Actor;
   const body = (await c.req.json().catch(() => ({}))) as {
@@ -240,6 +379,11 @@ export async function createMiscQr(c: Context) {
     zone_hint?: unknown;
     reveal_at?: unknown;
     expires_at?: unknown;
+    campaign_name?: unknown;
+    max_scans?: unknown;
+    cooldown_seconds?: unknown;
+    sponsor_id?: unknown;
+    session_id?: unknown;
   };
 
   const eventId = requiredString(body.event_id, "event_id");
@@ -248,15 +392,20 @@ export async function createMiscQr(c: Context) {
     throw new HTTPException(403, { message: "Business QRs are generated only by business creation" });
   }
 
-  if (!isStaffMiscQrType(body.type)) {
-    throw new HTTPException(400, { message: "type must be guest_speaker, ad_hoc_session, or bonus_zone" });
+  if (!isQrType(body.type)) {
+    throw new HTTPException(400, { message: "type is not supported" });
   }
 
   const reason = requiredString(body.reason, "reason");
+  const campaignName = optionalString(body.campaign_name) ?? reason;
   const points = optionalNumber(body.points, 0);
   const zoneHint = optionalString(body.zone_hint);
   const revealAt = optionalString(body.reveal_at);
   const expiresAt = optionalString(body.expires_at);
+  const maxScans = optionalPositiveInt(body.max_scans);
+  const cooldownSeconds = optionalNonNegativeInt(body.cooldown_seconds);
+  const sponsorId = optionalString(body.sponsor_id);
+  const sessionId = optionalString(body.session_id);
   const code = createQrCode("misc");
   const signature = signQr({ eventId, code, type: body.type }, env.QR_SIGNING_SECRET);
   const purposeFingerprint = qrPurposeFingerprint({
@@ -280,6 +429,12 @@ export async function createMiscQr(c: Context) {
       zone_hint,
       reason,
       purpose_fingerprint,
+      campaign_name,
+      status,
+      max_scans,
+      cooldown_seconds,
+      sponsor_id,
+      session_id,
       created_by_user_id
     )
     values (
@@ -295,12 +450,124 @@ export async function createMiscQr(c: Context) {
       ${zoneHint},
       ${reason},
       ${purposeFingerprint},
+      ${campaignName},
+      'active',
+      ${maxScans},
+      ${cooldownSeconds},
+      ${sponsorId},
+      ${sessionId},
       ${actor.id}
     )
     returning *
   `;
 
   return c.json({ qr: rows[0] });
+}
+
+export async function listQrCampaigns(c: Context) {
+  const eventId = c.req.query("event_id");
+  const status = c.req.query("status")?.trim();
+
+  if (!eventId) {
+    throw new HTTPException(400, { message: "event_id is required" });
+  }
+
+  const rows = await sql`
+    select
+      q.*,
+      count(sr.id)::int as total_scans,
+      count(distinct sr.attendee_id)::int as unique_attendees,
+      max(sr.awarded_at) as last_scan_at
+    from public.qr_codes q
+    left join public.scan_records sr on sr.qr_code_id = q.id
+    where q.event_id = ${eventId}
+      and q.owner_type = 'misc'
+      and (${status ?? null}::text is null or q.status = ${status ?? null})
+    group by q.id
+    order by q.created_at desc
+    limit 100
+  `;
+
+  return c.json({ campaigns: rows });
+}
+
+export async function setQrCampaignState(c: Context) {
+  const actor = c.get("actor") as Actor;
+  const id = requiredString(c.req.param("id"), "id");
+  const action = c.req.path.endsWith("/activate") ? "activate" : "deactivate";
+  const active = action === "activate";
+  const status = active ? "active" : "disabled";
+  const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
+  const reason = optionalString(body.reason);
+
+  const rows = await sql<QrCode[]>`
+    update public.qr_codes
+    set active = ${active},
+        status = ${status},
+        disabled_reason = case when ${active} then null else ${reason ?? "Disabled by operator"} end,
+        updated_at = now()
+    where id = ${id}
+      and owner_type = 'misc'
+    returning *
+  `;
+
+  if (!rows[0]) {
+    throw new HTTPException(404, { message: "QR campaign not found" });
+  }
+
+  await sql`
+    insert into public.audit_logs (
+      actor_user_id, actor_role, action, target_type, target_id, reason, metadata
+    )
+    values (
+      ${actor.id},
+      ${actor.role}::public.app_role,
+      ${active ? "qr_campaign.activated" : "qr_campaign.deactivated"},
+      'qr_code',
+      ${id},
+      ${reason ?? "operator_state_change"},
+      ${JSON.stringify({ qr_code_id: id, status })}::jsonb
+    )
+  `;
+
+  return c.json({ qr: rows[0] });
+}
+
+export async function qrCampaignAnalytics(c: Context) {
+  const id = requiredString(c.req.param("id"), "id");
+  const rows = await sql`
+    select
+      q.id,
+      q.event_id,
+      q.campaign_name,
+      q.type,
+      q.status,
+      q.active,
+      q.max_scans,
+      count(sr.id)::int as total_scans,
+      count(distinct sr.attendee_id)::int as unique_attendees,
+      max(sr.awarded_at) as last_scan_at
+    from public.qr_codes q
+    left join public.scan_records sr on sr.qr_code_id = q.id
+    where q.id = ${id}
+      and q.owner_type = 'misc'
+    group by q.id
+  `;
+
+  if (!rows[0]) {
+    throw new HTTPException(404, { message: "QR campaign not found" });
+  }
+
+  const recentScans = await sql`
+    select sr.id, sr.awarded_at, sr.points_competition, a.alias
+    from public.scan_records sr
+    join public.attendees a on a.id = sr.attendee_id
+    where sr.qr_code_id = ${id}
+    order by sr.awarded_at desc
+    limit 25
+  `;
+
+  return c.json({ campaign: rows[0], recent_scans: recentScans });
 }
 
 export async function verifyScanSignature(c: Context) {

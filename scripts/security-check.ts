@@ -59,7 +59,7 @@ const probes: Probe[] = [
       }),
     accept: [403]
   },
-  { name: "staff redeem requires auth", run: () => request("/staff/redeem", { method: "POST" }), accept: [401] },
+  { name: "staff QR campaigns require auth", run: () => request("/staff/qr-campaigns", { method: "POST" }), accept: [401] },
   {
     name: "qr print rejects attendee",
     run: () => request(`/admin/qr/print?event_id=${eventId}`, { headers: { authorization: attendeeBearer } }),

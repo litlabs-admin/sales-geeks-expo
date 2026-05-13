@@ -51,6 +51,75 @@ async function exportRows(type: string, eventId: string) {
     return toCsv(rows, ["id", "sponsor_name", "email", "real_name", "business_name", "created_at"]);
   }
 
+  if (type === "leaderboard") {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      select
+        row_number() over (
+          order by competition_score desc, reached_current_score_at asc nulls last, id asc
+        )::int as rank,
+        alias,
+        competition_score,
+        reached_current_score_at
+      from public.attendees
+      where event_id = ${eventId}
+      order by rank asc
+    `;
+    return toCsv(rows, ["rank", "alias", "competition_score", "reached_current_score_at"]);
+  }
+
+  if (type === "rewards") {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      select id, name, type, cost, inventory, per_attendee_limit, lock_until, expires_at, created_at
+      from public.rewards
+      where event_id = ${eventId}
+      order by name asc
+    `;
+    return toCsv(rows, ["id", "name", "type", "cost", "inventory", "per_attendee_limit", "lock_until", "expires_at", "created_at"]);
+  }
+
+  if (type === "redemptions") {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      select r.id, a.alias, rw.name as reward_name, r.state, rw.cost as points_spent, r.created_at, r.completed_at
+      from public.redemption_records r
+      join public.attendees a on a.id = r.attendee_id
+      join public.rewards rw on rw.id = r.reward_id
+      where r.event_id = ${eventId}
+      order by r.created_at asc
+    `;
+    return toCsv(rows, ["id", "alias", "reward_name", "state", "points_spent", "created_at", "completed_at"]);
+  }
+
+  if (type === "notifications") {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      select id, title, audience, scheduled_at, delivered_at, created_at
+      from public.notifications
+      where event_id = ${eventId}
+      order by created_at asc
+    `;
+    return toCsv(rows, ["id", "title", "audience", "scheduled_at", "delivered_at", "created_at"]);
+  }
+
+  if (type === "audit-logs") {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      select id, actor_user_id, actor_role, action, target_type, target_id, reason, created_at
+      from public.audit_logs
+      where metadata->>'event_id' = ${eventId}
+         or target_id = ${eventId}
+      order by created_at asc
+    `;
+    return toCsv(rows, ["id", "actor_user_id", "actor_role", "action", "target_type", "target_id", "reason", "created_at"]);
+  }
+
+  if (type === "qr-analytics") {
+    const rows = await sql<Array<Record<string, unknown>>>`
+      select qr_code_id, campaign_name, type, status, active, total_scans, unique_attendees, last_scan_at
+      from public.vw_ops_qr_activity
+      where event_id = ${eventId}
+      order by total_scans desc, campaign_name asc
+    `;
+    return toCsv(rows, ["qr_code_id", "campaign_name", "type", "status", "active", "total_scans", "unique_attendees", "last_scan_at"]);
+  }
+
   throw new HTTPException(404, { message: "Unknown export type" });
 }
 

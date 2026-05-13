@@ -6,12 +6,16 @@
   "scripts": {
     "dev:web": "pnpm --filter web dev",
     "dev:backend": "pnpm --filter backend dev",
+    "dev": "turbo run dev --parallel",
     "test": "turbo run test",
     "test:e2e": "playwright test",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
-    "redis:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "local:up": "supabase start && docker compose -f infra/docker/docker-compose.yml up -d",
+    "local:down": "docker compose -f infra/docker/docker-compose.yml down && supabase stop",
+    "redis:up": "docker compose -f infra/docker/docker-compose.yml up -d redis",
     "redis:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "db:reset": "tsx scripts/db-reset.ts",
     "db:truncate": "tsx scripts/db-truncate.ts",
     "db:seed": "tsx scripts/seed-base.ts",
     "smoke": "tsx scripts/smoke.ts",
@@ -75,7 +79,7 @@
     "test:archive:leaderboard-auth": "tsx scripts/test-final-leaderboard-auth.ts",
     "load:all": "tsx scripts/load-summary.ts",
     "security": "tsx scripts/security-check.ts",
-    "uat": "tsx scripts/full-uat.ts"
+    "uat": "pnpm db:reset && pnpm db:seed && tsx scripts/full-uat.ts"
   },
   "dependencies": {
     "@sgexpo/domain": "workspace:*",

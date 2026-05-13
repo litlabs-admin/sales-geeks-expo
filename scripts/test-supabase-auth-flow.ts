@@ -1,4 +1,4 @@
-import { anonymousSession, backendBaseUrl, closeSql, getEventId, sql, supabaseAnon } from "./lib/phase2";
+import { anonymousSession, backendBaseUrl, closeSql, getEventId, sql, supabaseAdmin } from "./lib/phase2";
 
 const eventId = await getEventId();
 const session = await anonymousSession();
@@ -23,17 +23,18 @@ if (!upsert.ok) {
 const devInbox = process.env.DEV_TEST_INBOX ?? "engineering+sgexpo@litlabs.io";
 const [localPart, domain] = devInbox.split("@");
 const email = `${localPart}+phase2-${Date.now()}@${domain}`;
-const { error } = await supabaseAnon.auth.signInWithOtp({
+const { data: linkData, error } = await supabaseAdmin.auth.admin.generateLink({
+  type: "magiclink",
   email,
-  options: { shouldCreateUser: true }
+  options: { data: { test: "phase2-custom-auth" } }
 });
 
-if (error && error.status !== 429) {
+if (error) {
   throw error;
 }
 
-if (error?.status === 429) {
-  console.log("OTP request skipped by Supabase email rate limit; anonymous auth path still passed.");
+if (!linkData.properties?.hashed_token) {
+  throw new Error("Custom auth link generation did not return a token hash");
 }
 
 const rows = await sql<{ id: string }[]>`

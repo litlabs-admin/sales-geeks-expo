@@ -1,75 +1,66 @@
-import Link from "next/link";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import RoleEntryClient from "./role-entry-client";
 
-const sections = [
-  {
-    title: "Attendee App",
-    body: "Five-tab mobile companion with live agenda, Geeks, rewards, leaderboard, sponsors, FAQs, profile, terms, and scan entry.",
-    links: [
-      { href: "/sge-2026/home", label: "Home" },
-      { href: "/sge-2026/agenda", label: "Agenda" },
-      { href: "/sge-2026/geeks", label: "Geeks" },
-      { href: "/sge-2026/rewards", label: "Rewards" },
-      { href: "/sge-2026/leaderboard", label: "Leaderboard" },
-      { href: "/sge-2026/sponsors", label: "Sponsors" },
-      { href: "/sge-2026/join", label: "Join / OTP" }
-    ]
-  },
-  {
-    title: "Admin Console",
-    body: "Event lifecycle, business QR generation, exports, notification operations, and event-day ops surfaces.",
-    links: [
-      { href: "/admin/events", label: "Events" },
-      { href: "/admin/businesses", label: "Businesses" },
-      { href: "/admin/qr", label: "QR Tools" },
-      { href: "/admin/exports", label: "Exports" },
-      { href: "/admin/notifications", label: "Notifications" },
-      { href: "/admin/ops", label: "Ops" }
-    ]
-  },
-  {
-    title: "Staff Tools",
-    body: "Fast desk workflows for attendee reward fulfilment and redemption checks.",
-    links: [{ href: "/staff/redeem", label: "Redeem Reward" }]
+type EventSummary = {
+  slug: string;
+  name: string;
+  lifecycle_state?: string;
+};
+
+export default async function Page() {
+  const supabase = createServerSupabaseClient();
+  const { data: events, error } = await supabase
+    .from("events_public")
+    .select("slug,name,lifecycle_state")
+    .order("starts_at", { ascending: true })
+    .limit(1);
+
+  if (error) {
+    throw new Error(error.message);
   }
-];
 
-export default function Page() {
+  const event = (events?.[0] ?? { slug: "sge-2026", name: "Scottish Growth Expo 2026" }) as EventSummary;
+  const adminEmail = process.env.DEV_ADMIN_EMAIL ?? "admin+sgexpo@litlabs.io";
+  const staffEmail = process.env.DEV_STAFF_EMAIL ?? "staff+sgexpo@litlabs.io";
+  const attendeeEmail = process.env.DEV_ATTENDEE_EMAIL ?? "attendee+sgexpo@litlabs.io";
+  const roleOptions = [
+    {
+      mode: "attendee" as const,
+      title: "Attendee",
+      description: "Register or enter the event app for Home, Agenda, Geeks, Rewards, Sponsors, and Leaderboard.",
+      email: attendeeEmail,
+      next: `/${event.slug}/home`,
+      eventSlug: event.slug,
+      buttonLabel: "Enter attendee app"
+    },
+    {
+      mode: "staff" as const,
+      title: "Staff",
+      description: "Open QR Operations for guest speaker, session, sponsor booth, bonus, and live engagement QRs.",
+      email: staffEmail,
+      next: "/staff/qr",
+      buttonLabel: "Enter staff tools"
+    },
+    {
+      mode: "admin" as const,
+      title: "Admin",
+      description: "Open the admin console for events, businesses, fixed QRs, exports, notifications, and ops.",
+      email: adminEmail,
+      next: "/admin/events",
+      buttonLabel: "Enter admin console"
+    }
+  ];
+
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-6 py-10">
-      <p className="text-sm font-medium uppercase tracking-wide text-brand">SalesGeek Scotland</p>
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold leading-tight text-ink">
-            Scottish Growth Expo 2026 event app
-          </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-700">
-            Local system preview for attendee, staff, and admin workflows.
-          </p>
-        </div>
-        <Link className="text-sm font-semibold text-brand" href="/health">
-          Web health
-        </Link>
-      </div>
-
-      <div className="mt-8 grid gap-4 md:grid-cols-3">
-        {sections.map((section) => (
-          <section className="rounded-md border border-slate-200 bg-white p-4" key={section.title}>
-            <h2 className="text-base font-semibold text-ink">{section.title}</h2>
-            <p className="mt-2 min-h-16 text-sm leading-6 text-slate-600">{section.body}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {section.links.map((link) => (
-                <Link
-                  className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700 hover:border-brand hover:text-brand"
-                  href={link.href}
-                  key={link.href}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
+    <main className="mx-auto min-h-screen max-w-3xl px-6 py-10">
+      <p className="text-sm font-medium text-brand">SalesGeek Scotland</p>
+      <h1 className="mt-3 text-3xl font-semibold leading-tight text-ink">
+        {event.name}
+      </h1>
+      <p className="mt-4 text-base leading-7 text-slate-700">
+        Choose a role to test the live event app with the seeded dummy account for that role.
+      </p>
+      <RoleEntryClient options={roleOptions} />
     </main>
   );
 }

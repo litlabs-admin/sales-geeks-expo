@@ -1,3 +1,5 @@
+import { backendBaseUrl } from "./config";
+
 type FetchOptions = {
   order?: string;
   limit?: number;
@@ -40,10 +42,7 @@ export async function fetchContent<T>(
 }
 
 export async function backendGet<T>(path: string) {
-  const baseUrl =
-    process.env.BACKEND_URL?.replace(/\/health$/, "") ??
-    process.env.NEXT_PUBLIC_BACKEND_URL ??
-    "http://localhost:8080";
+  const baseUrl = backendBaseUrl();
   const response = await fetch(`${baseUrl}${path}`, { cache: "no-store" });
 
   if (!response.ok) {

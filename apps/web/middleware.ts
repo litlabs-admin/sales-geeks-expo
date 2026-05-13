@@ -1,6 +1,20 @@
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import type { Database } from "@sgexpo/contracts/db-types";
 
-const ignoredFirstSegments = new Set(["", "_next", "api", "admin", "health", "favicon.ico"]);
+const ignoredFirstSegments = new Set([
+  "",
+  "_next",
+  "api",
+  "admin",
+  "staff",
+  "auth",
+  "access-denied",
+  "dev",
+  "health",
+  "login",
+  "favicon.ico"
+]);
 
 type PublicEvent = {
   id: string;
@@ -14,6 +28,8 @@ type PublicEvent = {
   } | null;
 };
 
+type CookieToSet = { name: string; value: string; options: CookieOptions };
+
 function isIgnoredPath(pathname: string) {
   const firstSegment = pathname.split("/")[1] ?? "";
   return ignoredFirstSegments.has(firstSegment);
@@ -25,18 +41,48 @@ function cleanCssToken(value: string | undefined, fallback: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-
-  if (isIgnoredPath(pathname)) {
-    return NextResponse.next();
-  }
-
-  const eventSlug = pathname.split("/")[1];
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const requestHeaders = new Headers(request.headers);
+  const authCookies: CookieToSet[] = [];
 
   if (!supabaseUrl || !anonKey) {
     return new NextResponse("Event lookup is not configured", { status: 500 });
   }
+
+  const supabase = createServerClient<Database>(supabaseUrl, anonKey, {
+    cookies: {
+      getAll() {
+        return request.cookies.getAll();
+      },
+      setAll(cookiesToSet: CookieToSet[]) {
+        authCookies.push(...cookiesToSet);
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+      }
+    }
+  });
+
+  await supabase.auth.getUser();
+
+  function nextWithAuthCookies(headers = requestHeaders) {
+    const response = NextResponse.next({
+      request: {
+        headers
+      }
+    });
+
+    authCookies.forEach(({ name, value, options }) => {
+      response.cookies.set(name, value, options);
+    });
+
+    return response;
+  }
+
+  if (isIgnoredPath(pathname)) {
+    return nextWithAuthCookies();
+  }
+
+  const eventSlug = pathname.split("/")[1];
 
   const response = await fetch(
     `${supabaseUrl}/rest/v1/events_public?slug=eq.${encodeURIComponent(
@@ -61,19 +107,16 @@ export async function middleware(request: NextRequest) {
     return new NextResponse("Event not found", { status: 404 });
   }
 
-  const headers = new Headers(request.headers);
+  const headers = new Headers(requestHeaders);
   headers.set("x-event-id", event.id);
   headers.set("x-event-slug", event.slug);
   headers.set("x-event-name", event.name);
   headers.set("x-event-lifecycle-state", event.lifecycle_state);
   headers.set("x-brand-primary", cleanCssToken(event.brand_tokens?.primary, "18 110 130"));
   headers.set("x-brand-ink", cleanCssToken(event.brand_tokens?.ink, "18 23 28"));
+  headers.set("x-request-path", `${request.nextUrl.pathname}${request.nextUrl.search}`);
 
-  return NextResponse.next({
-    request: {
-      headers
-    }
-  });
+  return nextWithAuthCookies(headers);
 }
 
 export const config = {

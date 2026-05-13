@@ -1,10 +1,4 @@
-function backendBaseUrl() {
-  return (
-    process.env.BACKEND_URL?.replace(/\/health$/, "") ??
-    process.env.NEXT_PUBLIC_BACKEND_URL ??
-    "http://localhost:8080"
-  );
-}
+import { backendBaseUrl } from "@/lib/config";
 
 export async function GET(request: Request, { params }: { params: { type: string } }) {
   const authorization = request.headers.get("authorization");

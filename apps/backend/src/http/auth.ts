@@ -4,6 +4,7 @@ import { createRemoteJWKSet, decodeProtectedHeader, jwtVerify } from "jose";
 import type { Actor, Role } from "@sgexpo/domain/rbac";
 import { hasRequiredRole } from "@sgexpo/domain/rbac";
 import { env } from "../env";
+import { sql } from "../db/client";
 
 declare module "hono" {
   interface ContextVariableMap {
@@ -34,6 +35,53 @@ async function verifySupabaseJwt(token: string) {
   return jwtVerify(token, jwtSecret());
 }
 
+function isRole(value: unknown): value is Role {
+  return value === "attendee" || value === "staff" || value === "admin";
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+async function actorFromVerifiedPayload(payload: Record<string, unknown>): Promise<Actor> {
+  const userId = typeof payload.sub === "string" ? payload.sub : "";
+
+  if (!isUuid(userId)) {
+    throw new HTTPException(401, { message: "Invalid bearer token" });
+  }
+
+  const jwtEmail = typeof payload.email === "string" && payload.email.trim() ? payload.email.trim() : null;
+  const rows = await sql<Array<{ id: string; email: string | null; role: Role }>>`
+    select id, email, role
+    from public.users
+    where id = ${userId}
+    limit 1
+  `;
+  let user = rows[0];
+
+  if (!user) {
+    const inserted = await sql<Array<{ id: string; email: string | null; role: Role }>>`
+      insert into public.users (id, email, role)
+      values (${userId}, ${jwtEmail}, 'attendee')
+      on conflict (id) do update
+        set email = coalesce(public.users.email, excluded.email),
+            updated_at = now()
+      returning id, email, role
+    `;
+    user = inserted[0];
+  }
+
+  if (!user || !isRole(user.role)) {
+    throw new HTTPException(401, { message: "User role is not configured" });
+  }
+
+  return {
+    id: user.id,
+    email: user.email ?? jwtEmail ?? undefined,
+    role: user.role
+  };
+}
+
 export async function requireSupabaseJwt(c: Context, next: Next) {
   const token = getBearerToken(c.req.header("authorization"));
 
@@ -43,20 +91,13 @@ export async function requireSupabaseJwt(c: Context, next: Next) {
 
   try {
     const { payload } = await verifySupabaseJwt(token);
-    const role = (payload.app_role === "admin" || payload.app_role === "staff"
-      ? payload.app_role
-      : "attendee") as Role;
-
-    const email = typeof payload.email === "string" && payload.email.trim() ? payload.email : undefined;
-
-    c.set("actor", {
-      id: String(payload.sub),
-      email,
-      role
-    });
+    c.set("actor", await actorFromVerifiedPayload(payload as Record<string, unknown>));
 
     await next();
-  } catch {
+  } catch (error) {
+    if (error instanceof HTTPException) {
+      throw error;
+    }
     throw new HTTPException(401, { message: "Invalid bearer token" });
   }
 }

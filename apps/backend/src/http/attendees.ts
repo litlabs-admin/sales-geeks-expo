@@ -65,7 +65,8 @@ export async function upsertAttendee(c: Context) {
       real_name,
       business_name,
       phone,
-      alias
+      alias,
+      is_verified
     )
     values (
       ${eventId},
@@ -74,13 +75,15 @@ export async function upsertAttendee(c: Context) {
       ${optionalString(body.real_name)},
       ${optionalString(body.business_name)},
       ${optionalString(body.phone)},
-      ${aliasFor(actor)}
+      ${aliasFor(actor)},
+      ${Boolean(actor.email)}
     )
     on conflict (event_id, auth_user_id) do update
       set real_name = coalesce(excluded.real_name, public.attendees.real_name),
           business_name = coalesce(excluded.business_name, public.attendees.business_name),
           phone = coalesce(excluded.phone, public.attendees.phone),
           email = coalesce(public.attendees.email, excluded.email),
+          is_verified = public.attendees.is_verified or excluded.is_verified,
           updated_at = now()
     returning *
   `;

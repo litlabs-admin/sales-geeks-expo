@@ -1,7 +1,14 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const businessQrType = "business";
-export const staffMiscQrTypes = ["guest_speaker", "ad_hoc_session", "bonus_zone"] as const;
+export const staffMiscQrTypes = [
+  "guest_speaker",
+  "ad_hoc_session",
+  "bonus_zone",
+  "workshop",
+  "vip",
+  "networking"
+] as const;
 export const systemQrTypes = ["sponsor", "session", "hidden_bonus"] as const;
 export const qrTypes = [businessQrType, ...staffMiscQrTypes, ...systemQrTypes] as const;
 export const qrOwnerTypes = ["business", "misc"] as const;

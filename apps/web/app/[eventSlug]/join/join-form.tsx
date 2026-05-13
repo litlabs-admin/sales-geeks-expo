@@ -1,100 +1,132 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type JoinFormProps = {
   eventId: string;
+  eventSlug: string;
 };
 
-export default function JoinForm({ eventId }: JoinFormProps) {
-  const [accessToken, setAccessToken] = useState<string | null>(null);
+function normalizedEmail(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function safeNextPath(value: string | null, fallback: string) {
+  if (!value || !value.startsWith("/") || value.startsWith("//")) return fallback;
+  return value;
+}
+
+export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = useMemo(
+    () => safeNextPath(searchParams.get("next"), `/${eventSlug}/home`),
+    [eventSlug, searchParams]
+  );
+  const initialError = searchParams.get("error");
   const [email, setEmail] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
-  const [token, setToken] = useState("");
-  const [status, setStatus] = useState("Starting anonymous session...");
+  const [status, setStatus] = useState(
+    initialError
+      ? "That sign-in link expired or could not be used. Send yourself a fresh link."
+      : "Checking your sign-in status..."
+  );
+  const [sentTo, setSentTo] = useState("");
+  const [isCheckingSession, setIsCheckingSession] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function start() {
+    async function continueExistingSession() {
       const supabase = createBrowserSupabaseClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      let session = sessionData.session;
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
 
-      if (!session) {
-        const { data, error } = await supabase.auth.signInAnonymously();
-        if (error) {
-          setStatus(error.message);
-          return;
+      if (!token) {
+        if (!cancelled) {
+          setIsCheckingSession(false);
+          if (!initialError) {
+            setStatus("Enter your email and we will send a secure sign-in link.");
+          }
         }
-        session = data.session;
+        return;
       }
 
-      if (!session || cancelled) return;
-
-      setAccessToken(session.access_token);
       await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/attendees/upsert`, {
         method: "POST",
         headers: {
-          authorization: `Bearer ${session.access_token}`,
+          authorization: `Bearer ${token}`,
           "content-type": "application/json"
         },
         body: JSON.stringify({ event_id: eventId })
       });
-      setStatus("Anonymous event access ready.");
+
+      if (!cancelled) {
+        router.replace(next);
+        router.refresh();
+      }
     }
 
-    start();
+    void continueExistingSession().catch(() => {
+      if (!cancelled) {
+        setIsCheckingSession(false);
+        if (!initialError) {
+          setStatus("Enter your email and we will send a secure sign-in link.");
+        }
+      }
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [eventId]);
+  }, [eventId, initialError, next, router]);
 
-  async function requestOtp(event: FormEvent<HTMLFormElement>) {
+  async function requestMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const supabase = createBrowserSupabaseClient();
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        shouldCreateUser: true
-      }
+    const cleanEmail = normalizedEmail(email);
+    const response = await fetch("/api/auth/magic-link", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        email: cleanEmail,
+        mode: "attendee",
+        eventSlug,
+        next
+      })
     });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+      dev_verify_url?: string;
+    };
 
-    if (error) {
-      setStatus(error.message);
+    if (!response.ok) {
+      setStatus(payload.error ?? "Could not send the sign-in link.");
+      setSentTo("");
       return;
     }
 
-    setOtpSent(true);
-    setStatus("OTP requested. Check your email.");
-  }
-
-  async function verifyOtp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const supabase = createBrowserSupabaseClient();
-    const { data, error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email"
-    });
-
-    if (error) {
-      setStatus(error.message);
+    if (payload.dev_verify_url) {
+      setStatus(payload.message ?? "Opening seeded test account...");
+      window.location.assign(payload.dev_verify_url);
       return;
     }
 
-    setAccessToken(data.session?.access_token ?? accessToken);
-    setStatus("Email verified.");
+    setSentTo(cleanEmail);
+    setStatus(payload.message ?? "Check your email and open the secure sign-in link.");
   }
 
   return (
     <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
       <p className="text-sm text-slate-700">{status}</p>
-      {!otpSent ? (
-        <form className="mt-4 grid gap-3" onSubmit={requestOtp}>
+      {sentTo ? <p className="mt-2 text-xs text-slate-500">Sent to {sentTo}</p> : null}
+      {!isCheckingSession ? (
+        <form className="mt-4 grid gap-3" onSubmit={requestMagicLink}>
           <input
+            autoComplete="email"
             className="rounded-md border border-slate-300 px-3 py-2 text-base"
             name="email"
             onChange={(event) => setEmail(event.target.value)}
@@ -104,24 +136,10 @@ export default function JoinForm({ eventId }: JoinFormProps) {
             value={email}
           />
           <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" type="submit">
-            Send OTP
+            Send sign-in link
           </button>
         </form>
-      ) : (
-        <form className="mt-4 grid gap-3" onSubmit={verifyOtp}>
-          <input
-            className="rounded-md border border-slate-300 px-3 py-2 text-base"
-            inputMode="numeric"
-            onChange={(event) => setToken(event.target.value)}
-            placeholder="6-digit code"
-            required
-            value={token}
-          />
-          <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" type="submit">
-            Verify
-          </button>
-        </form>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import AdminOpsClient from "./ops-client";
 
 type EventSummary = {
   id: string;
@@ -15,16 +16,10 @@ export default async function AdminOpsPage() {
   if (error) throw new Error(error.message);
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl px-6 py-10">
+    <main className="mx-auto min-h-screen max-w-6xl px-6 py-8">
       <h1 className="text-2xl font-semibold text-ink">Ops Dashboard</h1>
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {((events ?? []) as EventSummary[]).map((event) => (
-          <section className="rounded-md border border-slate-200 bg-white p-4" key={event.id}>
-            <h2 className="text-sm font-semibold text-ink">{event.name}</h2>
-            <p className="mt-2 text-sm text-slate-600">Check-ins, scans, low stock, and recent audit widgets.</p>
-          </section>
-        ))}
-      </div>
+      <p className="mt-2 text-sm text-slate-600">Live health, check-in, scan, QR, reward, and audit signals.</p>
+      <AdminOpsClient events={(events ?? []) as EventSummary[]} />
     </main>
   );
 }

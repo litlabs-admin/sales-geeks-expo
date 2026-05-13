@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { backendGet, fetchContent } from "@/lib/content";
+import HomeProgressClient from "./home-progress-client";
 
 type Announcement = {
   id: string;
@@ -46,10 +47,7 @@ export default async function HomePage() {
         <p className="mt-2 text-sm text-slate-700">{next ? next.title : "Nothing else scheduled."}</p>
       </section>
 
-      <section className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold">Your Progress</h2>
-        <p className="mt-2 text-sm text-slate-700">Score 0 · Rank pending · Rewards unlock in Phase 6.</p>
-      </section>
+      <HomeProgressClient eventId={eventId} slug={slug} />
 
       <section className="mt-4">
         <div className="flex items-center justify-between">

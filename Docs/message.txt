@@ -1,0 +1,794 @@
+# Production-Ready Live Event Web App Implementation Prompt
+
+You are a senior staff-level full-stack engineer responsible for converting an existing prototype event platform into a production-ready live-event system that can reliably operate during a real-world expo with admins, staff, sponsors, and attendees simultaneously using the platform.
+
+The current system already contains partial backend/domain implementation, but the UI layer, auth integration, runtime reliability, operational tooling, and E2E readiness are incomplete.
+
+Your job is to refactor, complete, harden, and productionize the application.
+
+The system MUST behave like a real live-event product, not a demo shell.
+
+---
+
+# CRITICAL REQUIREMENTS
+
+The implementation must prioritize:
+
+* Reliability under live-event conditions
+* Real authentication flows
+* Real-time operational usability
+* Mobile-first UX
+* Correct RBAC enforcement
+* End-to-end workflow completeness
+* Deterministic local/dev environments
+* Production-safe architecture
+* Observability and resilience
+* Zero fake/demo placeholders in production paths
+
+DO NOT build mock/demo-only functionality.
+
+Every visible workflow must function end-to-end from browser → API → DB → UI update.
+
+---
+
+# ROLE MODEL (VERY IMPORTANT)
+
+There are ONLY 3 runtime roles:
+
+## 1. Attendee
+
+Capabilities:
+
+* join event
+* scan QR codes
+* earn points
+* unlock rewards
+* view leaderboard
+* track progress
+* view sponsor interactions
+* redeem rewards digitally (if applicable)
+* view history and achievements
+
+Attendees are the ONLY users who earn points.
+
+---
+
+## 2. Staff
+
+Staff members DO NOT redeem rewards manually.
+
+Staff responsibilities are:
+
+* generate special-purpose QR codes
+* generate temporary event interaction QRs
+* manage on-ground engagement flows
+* assist guest speakers/sponsors
+* trigger event-specific bonus activities
+* monitor scan issues
+* validate special event interactions
+
+Staff-generated QR examples:
+
+* guest speaker attendance QR
+* workshop/session QR
+* sponsor booth QR
+* VIP access QR
+* hidden bonus QR
+* special engagement QR
+* ad-hoc activity QR
+
+Attendees scan staff-generated QRs to earn points.
+
+Staff can:
+
+* create QR campaigns
+* activate/deactivate QRs
+* view scan analytics
+* monitor engagement activity
+* manage live event interactions
+
+Staff CANNOT:
+
+* modify leaderboard logic
+* manage system settings
+* access full admin exports
+* impersonate admins
+* directly assign points manually
+* bypass scoring engine
+
+All points must flow through the QR scan engine.
+
+---
+
+## 3. Admin
+
+Admins manage:
+
+* event configuration
+* businesses/sponsors
+* rewards
+* scoring rules
+* exports
+* analytics
+* operational dashboards
+* user management
+* QR policy/rules
+* audit systems
+* notifications
+* system-level controls
+
+Admins oversee the platform.
+
+---
+
+# EXISTING SYSTEM CONTEXT
+
+The backend already contains:
+
+* attendee flows
+* QR scan flows
+* scoring engine
+* rewards logic
+* exports
+* RBAC middleware
+* admin APIs
+* Supabase auth integration
+* Redis support
+* SQL migrations
+* leaderboard logic
+
+However, many frontend/admin/staff workflows are incomplete or disconnected.
+
+The current system passes tests only because tests forge JWTs instead of using real Supabase authentication.
+
+You must fix this properly.
+
+Reference findings:  
+
+---
+
+# TOP PRIORITY OBJECTIVES
+
+# 1. FIX AUTH + ROLE SYSTEM COMPLETELY
+
+Current issue:
+
+Backend expects `app_role` inside JWTs, but real Supabase JWTs do not include it.
+
+Result:
+
+* all real users become `attendee`
+* admin/staff routes fail in browser
+* tests pass only because JWTs are forged
+
+Required implementation:
+
+## Preferred Implementation
+
+After JWT verification:
+
+* fetch role from `public.users`
+* use DB role as source of truth
+* cache role lookup safely if needed
+
+Implementation requirements:
+
+* secure
+* typed
+* resilient
+* request-scoped
+* no duplicated DB queries
+
+Also implement:
+
+* admin login
+* staff login
+* attendee login
+* session persistence
+* logout
+* token refresh
+* route guards
+* role-aware middleware
+* role-aware navigation
+
+Frontend must show:
+
+* current role
+* current event
+* auth state
+* expired session handling
+
+---
+
+# 2. FIX SERVER AUTH SESSION REFRESH
+
+Current issue:
+
+Supabase SSR helper lacks:
+
+* set()
+* remove()
+
+Result:
+
+* session silently expires after ~1 hour
+* 24h session promise broken
+
+Required:
+
+Implement proper cookie management with:
+
+* get
+* set
+* remove
+
+Must support:
+
+* token rotation
+* refresh flow
+* SSR auth
+* middleware auth
+* protected routes
+* server actions
+
+Session must survive:
+
+* refreshes
+* navigation
+* SSR rendering
+* long-running event sessions
+
+---
+
+# 3. REBUILD ADMIN CONSOLE INTO A REAL OPERATIONS SYSTEM
+
+Current admin pages are fake/static.
+
+You must fully implement:
+
+## Admin Business Management
+
+Implement:
+
+* create business
+* edit business
+* archive business
+* list businesses
+* pagination
+* filtering
+* sponsor metadata
+* QR status
+* created timestamps
+* immutable signed business QR generation
+
+Must support:
+
+* optimistic updates
+* loading states
+* retries
+* validation
+* duplicate prevention
+
+---
+
+## Admin QR Governance
+
+Admins control:
+
+* QR rules
+* scoring policies
+* QR lifecycle
+* expiration policies
+* hidden QR rules
+* bulk generation
+* QR templates
+* sponsor QR permissions
+
+Required QR types:
+
+* sponsor
+* session
+* hidden_bonus
+* guest_speaker
+* ad_hoc_session
+* bonus_zone
+* workshop
+* vip
+* networking
+
+Add support for:
+
+* points
+* reveal_at
+* expires_at
+* zone_hint
+* usage rules
+* max scans
+* cooldowns
+* hidden unlock logic
+
+Admins can:
+
+* approve staff-created QR campaigns
+* disable compromised QR codes
+* monitor abuse
+* audit scans
+
+---
+
+## Admin Exports
+
+Implement:
+
+* attendee exports
+* scans exports
+* sponsor leads
+* leaderboard
+* rewards
+* notifications
+* audit logs
+* QR analytics
+
+Requirements:
+
+* CSV export
+* async export jobs
+* progress indicators
+* download URLs
+* retry support
+* timestamping
+* admin-only access
+
+---
+
+## Admin Ops Dashboard
+
+Must become a real-time operations center.
+
+Display:
+
+* active attendees
+* check-ins
+* scan volume
+* scans/minute
+* failed scans
+* duplicate scans
+* leaderboard movement
+* sponsor engagement
+* QR activity heatmaps
+* top-performing sessions
+* backend health
+* Redis health
+* DB health
+
+Must support:
+
+* polling
+* partial failure handling
+* manual refresh
+* live cards
+* mobile usability
+
+---
+
+# 4. BUILD REAL STAFF WORKFLOWS
+
+IMPORTANT:
+
+Staff members DO NOT redeem rewards.
+
+Their core purpose is facilitating attendee engagement through QR-driven interactions.
+
+---
+
+## Staff QR Operations Panel
+
+Implement a dedicated staff dashboard for:
+
+* creating engagement QR codes
+* launching temporary campaigns
+* managing session attendance
+* activating guest speaker QR flows
+* creating sponsor engagement interactions
+* generating networking challenge QRs
+* triggering hidden bonus activities
+
+---
+
+## Staff QR Creation
+
+Staff can generate:
+
+* guest speaker QR
+* sponsor booth QR
+* workshop QR
+* breakout session QR
+* networking QR
+* scavenger hunt QR
+* hidden bonus QR
+* engagement checkpoint QR
+
+Each QR must support:
+
+* configurable points
+* expiration
+* scan limits
+* anti-abuse cooldowns
+* optional geolocation validation
+* optional session linkage
+* optional sponsor linkage
+
+---
+
+## Staff QR Monitoring
+
+Staff dashboard must show:
+
+* live scan count
+* unique attendee scans
+* invalid scans
+* duplicate attempts
+* engagement analytics
+* session participation metrics
+
+---
+
+## Staff Restrictions
+
+Staff CANNOT:
+
+* redeem rewards
+* manually assign points
+* edit leaderboard values
+* access admin exports
+* modify scoring engine
+* impersonate admins
+* bypass anti-cheat rules
+
+All attendee points must come ONLY from successful QR scans processed by the backend scoring engine.
+
+---
+
+# 5. FIX ATTENDEE EXPERIENCE
+
+Replace all static text with live data.
+
+Attendee home must display:
+
+* current score
+* live rank
+* rewards unlocked
+* progress
+* recent scans
+* active quests
+* sponsor interactions
+* leaderboard position
+* earned badges
+* QR activity history
+
+Must support:
+
+* realtime/polling updates
+* optimistic UX
+* scan feedback
+* duplicate scan messaging
+* cooldown messaging
+* offline-tolerant interactions where possible
+
+---
+
+# 6. REMOVE DEMO/DEV UX FROM PRODUCTION FLOWS
+
+Current root page exposes:
+
+* attendee
+* admin
+* staff
+
+This is not production behavior.
+
+Required:
+
+## Production UX
+
+`/`
+must become:
+
+* event-aware landing page
+* attendee-first experience
+
+Move developer preview tools to:
+
+* `/dev/preview`
+
+Protect with:
+
+* environment flag
+* local-only access
+
+---
+
+# 7. FIX LOCAL DEV + DOCKER INFRASTRUCTURE
+
+Current Docker setup only runs Redis.
+
+Build full deterministic local stack.
+
+Required Docker services:
+
+* Postgres or local Supabase stack
+* Redis/Valkey
+* backend
+* worker
+* web
+* optional mail preview
+
+Create commands:
+
+```bash
+pnpm local:up
+```
+
+```bash
+pnpm db:reset
+```
+
+```bash
+pnpm db:seed
+```
+
+---
+
+# 8. CREATE FULL REALISTIC SEED DATA
+
+Generate complete event simulation:
+
+* attendees
+* admins
+* staff
+* sponsors
+* businesses
+* QR campaigns
+* session QRs
+* guest speaker QRs
+* sponsor booth QRs
+* scan history
+* leaderboard state
+* notifications
+* engagement analytics
+
+Must support:
+
+* UAT rehearsals
+* demo mode
+* stress testing
+
+---
+
+# 9. FIX PORT + ENVIRONMENT CONSISTENCY
+
+Standardize:
+
+* backend ports
+* frontend ports
+* environment variables
+* API resolution
+
+Requirements:
+
+* centralized config
+* environment validation
+* startup checks
+* clear fatal errors
+* no silent fallback behavior
+
+Implement:
+
+* typed env validation
+* runtime health checks
+* backend reachability checks
+
+---
+
+# 10. FIX CORS + MULTI-PORT DEV
+
+Support:
+
+* localhost:3000
+* localhost:3001
+* configurable origins
+
+Implement:
+
+* dev CORS
+* production CORS
+* env-driven allowlists
+
+---
+
+# 11. REMOVE FAKE TESTING STRATEGY
+
+Current tests forge JWTs using `SignJWT`.
+
+This is unacceptable for production validation.
+
+You MUST add:
+
+## REAL E2E AUTH TESTS
+
+Tests must:
+
+* sign in through real Supabase auth
+* obtain real session token
+* hit protected backend routes
+* verify RBAC behavior
+* verify attendee QR flows
+* verify staff QR creation flows
+* verify admin governance flows
+
+Add:
+
+* Playwright E2E tests
+* browser-based workflows
+* seeded UAT scenarios
+
+Critical flows:
+
+* attendee join
+* QR scan
+* leaderboard update
+* sponsor interaction
+* business creation
+* QR creation
+* QR expiration
+* exports
+* ops dashboard
+
+---
+
+# 12. IMPLEMENT PRODUCTION OBSERVABILITY
+
+Add:
+
+* structured logging
+* request IDs
+* error boundaries
+* retry logic
+* backend metrics
+* health endpoints
+
+Implement:
+
+* graceful error handling
+* typed API responses
+* no raw DB errors leaked
+* UUID validation before DB calls
+
+---
+
+# 13. UI/UX REQUIREMENTS
+
+The app must feel like a polished live-event platform.
+
+Requirements:
+
+* mobile-first
+* fast interactions
+* role-specific layouts
+* responsive design
+* minimal operator friction
+* clear feedback states
+* dark/light compatibility
+* accessibility support
+
+Avoid:
+
+* placeholder text
+* phase wording
+* developer terminology
+* dead buttons
+* fake cards
+
+---
+
+# 14. ARCHITECTURE REQUIREMENTS
+
+Maintain:
+
+* clean separation of concerns
+* typed contracts
+* scalable folder structure
+* reusable hooks/services
+* feature-based organization
+
+Must use:
+
+* proper API abstractions
+* typed DTOs
+* centralized auth utilities
+* shared validation schemas
+* transaction-safe DB logic
+
+---
+
+# 15. PRODUCTION HARDENING
+
+Implement:
+
+* idempotency
+* race-condition prevention
+* retry-safe APIs
+* duplicate scan protection
+* resilient queue handling
+* anti-cheat scan validation
+* QR replay protection
+
+Must tolerate:
+
+* high scan concurrency
+* intermittent network issues
+* refreshes during operations
+* browser reconnects
+
+---
+
+# 16. FINAL ACCEPTANCE CRITERIA
+
+The app is considered complete ONLY IF:
+
+* admin can create businesses through UI
+* admin can govern QR systems
+* staff can generate engagement QRs
+* attendees can scan live QRs
+* attendees earn points correctly
+* leaderboard updates correctly
+* rewards unlock correctly
+* exports work from browser
+* ops dashboard reflects live data
+* auth works with real Supabase sessions
+* all routes are role protected
+* no dead buttons exist
+* no placeholder data exists
+* Docker local environment is reproducible
+* E2E tests pass from clean setup
+* full live-event rehearsal succeeds without manual DB intervention
+
+---
+
+# IMPORTANT IMPLEMENTATION RULES
+
+DO NOT:
+
+* leave TODOs
+* create fake handlers
+* hardcode temporary values
+* bypass auth
+* mock production flows
+* skip loading/error states
+
+DO:
+
+* fully wire every action
+* build production-safe patterns
+* add proper validation
+* add resilience
+* implement complete UX flows
+
+---
+
+# OUTPUT FORMAT
+
+Provide:
+
+1. architecture changes
+2. folder-level modifications
+3. backend changes
+4. frontend changes
+5. DB changes
+6. auth changes
+7. Docker/infrastructure changes
+9. E2E testing strategy
+10. rollout order
+11. production-readiness checklist
+
+Then begin implementing incrementally with production-quality code.

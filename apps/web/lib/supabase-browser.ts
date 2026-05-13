@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@sgexpo/contracts/db-types";
 
 export function createBrowserSupabaseClient() {
@@ -9,5 +9,5 @@ export function createBrowserSupabaseClient() {
     throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY");
   }
 
-  return createClient<Database>(url, anonKey);
+  return createBrowserClient<Database>(url, anonKey);
 }

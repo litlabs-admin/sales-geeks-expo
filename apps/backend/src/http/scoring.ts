@@ -27,6 +27,8 @@ type QrRow = {
   expires_at: string | null;
   zone_hint: string | null;
   active: boolean;
+  status: string;
+  max_scans: number | null;
 };
 
 type AttendeeRow = {
@@ -57,6 +59,15 @@ function availabilityResult(qr: QrRow, window: { is_revealed: boolean; is_expire
   if (!qr.active) {
     return {
       status: "inactive",
+      points: 0,
+      newScore: null,
+      zoneHint: qr.zone_hint
+    } satisfies ScanAwardResult;
+  }
+
+  if (qr.status === "disabled" || qr.status === "expired") {
+    return {
+      status: qr.status === "expired" ? "expired" : "inactive",
       points: 0,
       newScore: null,
       zoneHint: qr.zone_hint
@@ -180,7 +191,7 @@ export async function findSignedQr(input: {
   }
 
   const rows = await sql<QrRow[]>`
-    select id, event_id, type, code, signature, points, reveal_at, expires_at, zone_hint, active
+    select id, event_id, type, code, signature, points, reveal_at, expires_at, zone_hint, active, status, max_scans
     from public.qr_codes
     where event_id = ${input.eventId}
       and code = ${input.code}
@@ -229,7 +240,7 @@ export async function awardScan(input: {
   useRateLimit?: boolean;
 }): Promise<ScanAwardResult> {
   const preflight = await sql<QrRow[]>`
-    select id, event_id, type, code, signature, points, reveal_at, expires_at, zone_hint, active
+    select id, event_id, type, code, signature, points, reveal_at, expires_at, zone_hint, active, status, max_scans
     from public.qr_codes
     where id = ${input.qrCodeId}
       and event_id = ${input.eventId}
@@ -276,7 +287,7 @@ export async function awardScan(input: {
     try {
       result = await sql.begin(async (tx) => {
     const qrRows = await tx<QrRow[]>`
-      select id, event_id, type, code, signature, points, reveal_at, expires_at, zone_hint, active
+      select id, event_id, type, code, signature, points, reveal_at, expires_at, zone_hint, active, status, max_scans
       from public.qr_codes
       where id = ${input.qrCodeId}
         and event_id = ${input.eventId}
@@ -300,6 +311,25 @@ export async function awardScan(input: {
 
     if (availability) {
       return availability;
+    }
+
+    await tx`select pg_advisory_xact_lock(hashtext(${input.qrCodeId}))`;
+
+    if (qr.max_scans !== null) {
+      const scanCountRows = await tx<{ total: number }[]>`
+        select count(*)::int as total
+        from public.scan_records
+        where qr_code_id = ${input.qrCodeId}
+      `;
+
+      if ((scanCountRows[0]?.total ?? 0) >= qr.max_scans) {
+        return {
+          status: "inactive",
+          points: 0,
+          newScore: null,
+          zoneHint: qr.zone_hint
+        } satisfies ScanAwardResult;
+      }
     }
 
     const inserted = await tx<{ id: string }[]>`
