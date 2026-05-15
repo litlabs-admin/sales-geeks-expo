@@ -20,51 +20,135 @@ type AgendaResponse = {
   }>;
 };
 
+const YLW = "#FFD000";
+const BLK = "#17191d";
+const DARK = "#1e2028";
+
 export default async function HomePage() {
   const headerStore = headers();
   const eventId = headerStore.get("x-event-id") ?? "";
   const slug = headerStore.get("x-event-slug") ?? "sge-2026";
-  const eventName = headerStore.get("x-event-name") ?? "Event";
-  const agenda = await backendGet<AgendaResponse>(`/content/agenda?event_id=${eventId}`);
+  const eventName = headerStore.get("x-event-name") ?? "Scottish Growth Expo 2026";
+
+  const agenda = await backendGet<AgendaResponse>(`/content/agenda?event_id=${eventId}`).catch(() => ({ sessions: [] }));
   const announcements = await fetchContent<Announcement>(
-    "announcements",
-    eventId,
-    "id,title,body,posted_at",
+    "announcements", eventId, "id,title,body,posted_at",
     { order: "posted_at.desc", limit: 3 }
-  );
-  const now = agenda.sessions.find((session) => session.status === "live");
-  const next = agenda.sessions.find((session) => session.status === "upcoming");
+  ).catch(() => [] as Announcement[]);
+
+  const now = agenda.sessions.find(s => s.status === "live");
+  const next = agenda.sessions.find(s => s.status === "upcoming");
+
+  function fmtTime(iso: string) {
+    return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function fmtPosted(iso: string) {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  }
 
   return (
-    <main className="mx-auto max-w-xl px-6 py-8">
-      <p className="text-sm font-medium text-brand">SalesGeek Scotland</p>
-      <h1 className="mt-2 text-2xl font-semibold text-ink">{eventName}</h1>
+    <main style={{ background: BLK, minHeight: "100dvh" }}>
 
-      <section className="mt-6 rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold">Now</h2>
-        <p className="mt-2 text-sm text-slate-700">{now ? now.title : "No live session right now."}</p>
-        <h2 className="mt-4 text-base font-semibold">Next</h2>
-        <p className="mt-2 text-sm text-slate-700">{next ? next.title : "Nothing else scheduled."}</p>
-      </section>
+      {/* ── Hero header ── */}
+      <div style={{
+        padding: "28px 20px 20px", position: "relative", overflow: "hidden",
+        background: "linear-gradient(160deg, #1a1500 0%, #111 55%)",
+      }}>
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.05,
+          backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`,
+          backgroundSize: "40px 40px",
+        }} />
+        <p style={{ color: "rgba(255,208,0,0.4)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>
+          SALESGEEK SCOTLAND
+        </p>
+        <h1 style={{
+          fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
+          fontWeight: 800, fontSize: 26, color: "white", margin: "4px 0 0", lineHeight: 1.1,
+        }}>
+          {eventName}
+        </h1>
+      </div>
 
-      <HomeProgressClient eventId={eventId} slug={slug} />
+      <div style={{ padding: "12px 16px 120px" }}>
 
-      <section className="mt-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-semibold">Announcements</h2>
-          <Link className="text-sm font-medium text-brand" href={`/${slug}/faqs`}>
-            FAQs
-          </Link>
+        {/* ── Now / Next ── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 4 }}>
+          {/* NOW */}
+          <div style={{
+            borderRadius: 12, padding: "14px 14px",
+            background: now
+              ? "linear-gradient(145deg, #1a1500, #111000)"
+              : DARK,
+            border: now ? `1px solid rgba(255,208,0,0.35)` : "1px solid #222",
+            boxShadow: now ? "0 0 24px rgba(255,208,0,0.06)" : "none",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              {now && <span style={{ width: 6, height: 6, borderRadius: "50%", background: YLW }} className="animate-pulse" />}
+              <span style={{ color: now ? YLW : "#787b8f", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em" }}>
+                {now ? "LIVE NOW" : "NOW"}
+              </span>
+            </div>
+            <p style={{ color: now ? "white" : "#686a7d", fontSize: 12, fontWeight: now ? 700 : 400, lineHeight: 1.4, margin: 0 }}>
+              {now ? now.title : "No live session"}
+            </p>
+            {now && (
+              <p style={{ color: "rgba(255,208,0,0.4)", fontSize: 10, marginTop: 4 }}>
+                until {fmtTime(now.ends_at)}
+              </p>
+            )}
+          </div>
+
+          {/* NEXT */}
+          <div style={{ borderRadius: 12, padding: "14px 14px", background: DARK, border: "1px solid #222" }}>
+            <div style={{ marginBottom: 6 }}>
+              <span style={{ color: "#787b8f", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em" }}>NEXT UP</span>
+            </div>
+            <p style={{ color: next ? "#b8bace" : "#686a7d", fontSize: 12, fontWeight: next ? 600 : 400, lineHeight: 1.4, margin: 0 }}>
+              {next ? next.title : "Nothing scheduled"}
+            </p>
+            {next && (
+              <p style={{ color: "#8b8fa8", fontSize: 10, marginTop: 4 }}>{fmtTime(next.starts_at)}</p>
+            )}
+          </div>
         </div>
-        <div className="mt-3 grid gap-3">
-          {announcements.map((announcement) => (
-            <article className="rounded-md border border-slate-200 bg-white p-4" key={announcement.id}>
-              <h3 className="text-sm font-semibold">{announcement.title}</h3>
-              <p className="mt-1 text-sm text-slate-700">{announcement.body}</p>
-            </article>
-          ))}
+
+        {/* ── Progress Widget ── */}
+        <HomeProgressClient eventId={eventId} slug={slug} />
+
+        {/* ── Announcements ── */}
+        <div style={{ marginTop: 20 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <h2 style={{ color: "white", fontWeight: 700, fontSize: 14, margin: 0 }}>Announcements</h2>
+            <Link href={`/${slug}/faqs`} style={{ color: "rgba(255,208,0,0.6)", fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
+              FAQs →
+            </Link>
+          </div>
+
+          {announcements.length === 0 ? (
+            <div style={{
+              textAlign: "center", padding: "32px 16px",
+              background: DARK, borderRadius: 12, border: "1px solid #222",
+            }}>
+              <p style={{ color: "#787b8f", fontSize: 13 }}>No announcements yet</p>
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {announcements.map(a => (
+                <article key={a.id} style={{
+                  borderRadius: 12, padding: "14px 16px",
+                  background: DARK, border: "1px solid #222",
+                }}>
+                  <p style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0 }}>{a.title}</p>
+                  <p style={{ color: "#9294a8", fontSize: 12, marginTop: 5, lineHeight: 1.6 }}>{a.body}</p>
+                  <p style={{ color: "#686a7d", fontSize: 10, marginTop: 6 }}>{fmtPosted(a.posted_at)}</p>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
-      </section>
+      </div>
     </main>
   );
 }

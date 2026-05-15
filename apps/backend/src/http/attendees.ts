@@ -172,3 +172,44 @@ export async function recordPendingScan(c: Context) {
 
   return c.json({ ok: true });
 }
+
+export async function getAttendeeScans(c: Context) {
+  const actor = c.get("actor") as Actor;
+  const eventId = c.req.query("event_id");
+
+  if (!eventId) {
+    throw new HTTPException(400, { message: "event_id is required" });
+  }
+
+  const attendeeRows = await sql<Array<{ id: string }>>`
+    select id from public.attendees
+    where event_id = ${eventId} and auth_user_id = ${actor.id}
+    limit 1
+  `;
+
+  const attendee = attendeeRows[0];
+  if (!attendee) {
+    return c.json({ scans: [] });
+  }
+
+  const scans = await sql`
+    select
+      sr.id,
+      sr.awarded_at,
+      sr.points_competition,
+      sr.points_spendable,
+      json_build_object(
+        'campaign_name', q.campaign_name,
+        'type', q.type,
+        'reason', q.reason
+      ) as qr_code
+    from public.scan_records sr
+    join public.qr_codes q on q.id = sr.qr_code_id
+    where sr.attendee_id = ${attendee.id}
+    order by sr.awarded_at desc
+    limit 50
+  `;
+
+  return c.json({ scans });
+}
+

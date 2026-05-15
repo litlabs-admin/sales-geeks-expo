@@ -1,3 +1,5 @@
+﻿@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;800&family=Inter:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,14 +7,280 @@
 :root {
   --brand-primary: 18 110 130;
   --brand-ink: 18 23 28;
+  --brand-primary-hex: #126e82;
+  --transition-base: 180ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Sales Geek brand identity — yellow + black */
+  --sg-yellow: 255 208 0;
+  --sg-black: 23 25 29;
+  --sg-dark: 30 32 40;
 }
 
-html,
-body {
-  min-height: 100%;
+/* Sales Geek display font — Barlow Condensed for hero headings */
+.font-display {
+  font-family: 'Barlow Condensed', 'Arial Narrow', Arial, sans-serif;
+  font-weight: 800;
 }
 
-body {
-  background: #f7f8f8;
-  color: rgb(var(--brand-ink));
+@layer base {
+  html,
+  body {
+    min-height: 100%;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: #17191d;
+    color: rgb(var(--brand-ink));
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Smooth scroll everywhere */
+  html {
+    scroll-behavior: smooth;
+  }
 }
+
+@layer utilities {
+  /* Glass card utility */
+  .glass {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+  }
+
+  /* Brand gradient background */
+  .bg-brand-gradient {
+    background: linear-gradient(135deg, rgb(var(--brand-primary)) 0%, rgb(10 80 95) 100%);
+  }
+
+  /* Subtle card hover lift */
+  .card-hover {
+    transition: transform var(--transition-base), box-shadow var(--transition-base);
+  }
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Pulse animation for live indicator */
+  .pulse-dot::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    background: rgb(var(--brand-primary) / 0.3);
+    animation: pulse-ring 1.5s ease-out infinite;
+  }
+}
+
+/* Keyframes */
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+@keyframes slide-up {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pop-in {
+  0% { transform: scale(0.85); opacity: 0; }
+  70% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes score-bump {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.4); color: rgb(var(--brand-primary)); }
+  100% { transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Animation utility classes */
+.animate-slide-up { animation: slide-up 0.35s ease-out both; }
+.animate-fade-in { animation: fade-in 0.25s ease-out both; }
+.animate-pop-in { animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) both; }
+.animate-score-bump { animation: score-bump 0.5s ease-out; }
+
+/* Skeleton loading shimmer */
+.skeleton {
+  background: linear-gradient(90deg, #e2e8ea 25%, #f0f4f5 50%, #e2e8ea 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* Bottom nav safe area padding for iOS */
+.pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
+/* QR scanner overlay */
+.qr-scanner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 0.2s ease-out;
+}
+
+/* Scan result flash */
+.scan-result-flash {
+  animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) both;
+}
+
+/* Better focus rings */
+:focus-visible {
+  outline: 2px solid rgb(var(--brand-primary));
+  outline-offset: 2px;
+}
+
+/* Tap highlight removal on mobile */
+button, a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Admin nav links — dark header with yellow hover */
+.admin-nav-link {
+  background: #1e2028;
+  border: 1px solid #2d3040;
+  color: #b8bace;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 6px;
+  text-decoration: none;
+  transition: color 150ms, border-color 150ms;
+}
+.admin-nav-link:hover {
+  color: #FFD000;
+  border-color: rgba(255, 208, 0, 0.25);
+}
+.admin-back-link:hover {
+  color: #b8bace;
+  border-color: #787b8f;
+}
+.admin-event-link:hover {
+  background: #1f2130 !important;
+  border-color: #2d3040 !important;
+}
+.admin-sidebar-link:hover {
+  background: #1e2028;
+  color: #FFD000;
+}
+.admin-sidebar-link:hover span {
+  opacity: 1 !important;
+}
+
+/* ── Agenda Timeline Animations ── */
+@keyframes node-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(18, 110, 130, 0.55); }
+  50%       { box-shadow: 0 0 0 9px rgba(18, 110, 130, 0); }
+}
+
+@keyframes wave-drift {
+  0%, 100% { transform: translate(0px, 0px) rotate(0deg) scale(1); }
+  33%       { transform: translate(18px, -22px) rotate(6deg) scale(1.09); }
+  66%       { transform: translate(-12px, 12px) rotate(-4deg) scale(0.93); }
+}
+
+@keyframes check-draw {
+  from { stroke-dashoffset: 24; opacity: 0; }
+  to   { stroke-dashoffset: 0;  opacity: 1; }
+}
+
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes line-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+.animate-node-pulse { animation: node-pulse 2s ease-in-out infinite; }
+.animate-wave-drift { animation: wave-drift 11s ease-in-out infinite; }
+.animate-wave-drift-r { animation: wave-drift 15s ease-in-out infinite reverse; }
+
+/* ── Dark skeleton (for dark-bg pages) ── */
+.skeleton-dark {
+  background: linear-gradient(90deg, #1f2130 25%, #282b3a 50%, #1f2130 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+
+/* ── Score flash (yellow burst when score increases) ── */
+@keyframes score-flash {
+  0%   { transform: scale(1);    color: white; }
+  35%  { transform: scale(1.38); color: #FFD000; }
+  100% { transform: scale(1);    color: white; }
+}
+.animate-score-flash { animation: score-flash 0.55s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+/* ── Reward unlock pop ── */
+@keyframes reward-unlock {
+  0%   { transform: scale(0.92); opacity: 0; }
+  65%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+.animate-reward-unlock { animation: reward-unlock 0.35s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+/* ── Expand panel ── */
+@keyframes expand-down {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-expand-down { animation: expand-down 0.22s ease-out both; }
+
+/* ── Yellow glow pulse (for live/active elements) ── */
+@keyframes yellow-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(255,208,0,0.5); }
+  50%       { box-shadow: 0 0 0 9px rgba(255,208,0,0);   }
+}
+.animate-yellow-pulse { animation: yellow-pulse 2s ease-in-out infinite; }
+
+/* ── Rank badge fly-in ── */
+@keyframes rank-in {
+  from { transform: scale(0.6) rotate(-12deg); opacity: 0; }
+  to   { transform: scale(1)   rotate(0deg);   opacity: 1; }
+}
+.animate-rank-in { animation: rank-in 0.4s cubic-bezier(0.34,1.56,0.64,1) both; }
+
+/* ── Float up (confetti particle) ── */
+@keyframes float-up {
+  0%   { transform: translateY(0)    rotate(0deg)   scale(1);   opacity: 1; }
+  100% { transform: translateY(-90px) rotate(360deg) scale(0.4); opacity: 0; }
+}
+
+/* ── Reduced motion overrides ── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+

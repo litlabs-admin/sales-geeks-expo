@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import { createApp } from "./http/app";
 
-const port = Number(process.env.PORT ?? 8080);
+const port = Number(process.env.PORT ?? 8081);
 
 serve(
   {

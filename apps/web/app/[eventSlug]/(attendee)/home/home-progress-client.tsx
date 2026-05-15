@@ -1,13 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState } from "react";
 import Link from "next/link";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
-type Props = {
-  eventId: string;
-  slug: string;
-};
+export type HomeProgressHandle = { reload: () => void };
+
+type Props = { eventId: string; slug: string; handleRef?: React.Ref<HomeProgressHandle> };
 
 type Attendee = {
   competition_score: number;
@@ -16,80 +15,207 @@ type Attendee = {
   checked_in_at: string | null;
 };
 
-type LeaderboardOwn = {
-  rank: number;
-  alias: string;
-  competition_score: number;
-} | null;
+type LeaderboardOwn = { rank: number; alias: string; competition_score: number } | null;
 
-export default function HomeProgressClient({ eventId, slug }: Props) {
+const YLW = "#FFD000";
+const BLK = "#17191d";
+const DARK = "#1e2028";
+
+/* ── Stat card with optional flash ── */
+function StatCard({ label, value, accent, big }: { label: string; value: string | number; accent?: boolean; big?: boolean }) {
+  const prevRef = useRef<typeof value>(value);
+  const [flashing, setFlashing] = useState(false);
+
+  useEffect(() => {
+    if (prevRef.current !== value && prevRef.current !== undefined) {
+      setFlashing(true);
+      setTimeout(() => setFlashing(false), 600);
+    }
+    prevRef.current = value;
+  }, [value]);
+
+  return (
+    <div style={{
+      borderRadius: 10, padding: "14px 10px", textAlign: "center",
+      background: accent ? "rgba(255,208,0,0.08)" : DARK,
+      border: accent ? "1px solid rgba(255,208,0,0.2)" : "1px solid #222",
+    }}>
+      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: accent ? "rgba(255,208,0,0.5)" : "#787b8f", margin: 0 }}>
+        {label}
+      </p>
+      <p style={{
+        fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
+        fontWeight: 800,
+        fontSize: big ? 28 : 22,
+        color: accent ? YLW : "#b8bace",
+        margin: "4px 0 0", lineHeight: 1,
+        animation: flashing ? "score-flash 0.55s cubic-bezier(0.34,1.56,0.64,1) both" : "none",
+      }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/* ── Status dot ── */
+function StatusDot({ active, label, warn }: { active: boolean; label: string; warn?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "#8b8fa8" }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: "50%",
+        background: active ? "#10b981" : warn ? "#f59e0b" : "#686a7d",
+      }} />
+      {label}
+    </span>
+  );
+}
+
+export default function HomeProgressClient({ eventId, slug, handleRef }: Props) {
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [ownRank, setOwnRank] = useState<LeaderboardOwn>(null);
   const [rewardCount, setRewardCount] = useState(0);
-  const [status, setStatus] = useState("Loading your live progress...");
+  const [status, setStatus] = useState("Loading…");
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const internalRef = useRef<HomeProgressHandle>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       const supabase = createBrowserSupabaseClient();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-      if (!token) {
-        setStatus("Sign in to see your points, rank, and rewards.");
-        return;
-      }
+      if (!token) { setStatus("Sign in to see your points, rank, and rewards."); setLoading(false); return; }
       const headers = { authorization: `Bearer ${token}` };
-      const [attendeeResponse, leaderboardResponse, rewardsResponse] = await Promise.all([
+      const [attRes, lbRes, rwRes] = await Promise.all([
         fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/attendees/me?event_id=${eventId}`, { headers, cache: "no-store" }),
         fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/leaderboard?event_id=${eventId}`, { headers, cache: "no-store" }),
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/rewards?event_id=${eventId}`, { headers, cache: "no-store" })
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/rewards?event_id=${eventId}`, { headers, cache: "no-store" }),
       ]);
-      const attendeePayload = await attendeeResponse.json();
-      const leaderboardPayload = await leaderboardResponse.json();
-      const rewardsPayload = await rewardsResponse.json();
-      if (!attendeeResponse.ok) throw new Error(attendeePayload.error ?? "Could not load attendee");
-      setAttendee(attendeePayload.attendee);
-      setOwnRank(leaderboardPayload.own ?? null);
-      setRewardCount((rewardsPayload.rewards ?? []).length);
+      const attPayload = await attRes.json();
+      const lbPayload = await lbRes.json();
+      const rwPayload = await rwRes.json();
+      if (!attRes.ok) throw new Error(attPayload.error ?? "Could not load attendee");
+      setAttendee(attPayload.attendee);
+      setOwnRank(lbPayload.own ?? null);
+      setRewardCount((rwPayload.rewards ?? []).length);
       setStatus("");
+      setLastUpdated(new Date());
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Could not load progress");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, [eventId]);
+
+  useImperativeHandle(handleRef ?? internalRef, () => ({ reload: load }), [load]);
 
   useEffect(() => {
     void load();
     const timer = window.setInterval(() => void load(), 15_000);
     return () => window.clearInterval(timer);
-  }, [eventId]);
+  }, [load]);
 
-  if (!attendee) {
+  if (loading && !attendee) {
     return (
-      <section className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-        <h2 className="text-base font-semibold">Your Progress</h2>
-        <p className="mt-2 text-sm text-slate-700">{status}</p>
-        <Link className="mt-3 inline-flex rounded-md bg-brand px-3 py-2 text-sm font-semibold text-white" href={`/${slug}/join`}>
+      <section style={{ borderRadius: 14, overflow: "hidden", background: DARK, border: "1px solid #222", marginTop: 16 }}>
+        <div style={{ padding: 20 }}>
+          <div className="skeleton-dark" style={{ height: 14, width: 120, marginBottom: 16 }} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+            {[1, 2, 3, 4].map(i => <div key={i} className="skeleton-dark" style={{ height: 64 }} />)}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  if (!attendee && !loading) {
+    return (
+      <section style={{
+        marginTop: 16, borderRadius: 14, padding: 20,
+        background: DARK, border: "1px solid #222",
+        animation: "slide-up 0.35s ease-out both",
+      }}>
+        <p style={{ color: "white", fontWeight: 700, fontSize: 15 }}>Your Progress</p>
+        <p style={{ color: "#8b8fa8", fontSize: 13, marginTop: 6 }}>{status}</p>
+        <Link href={`/${slug}/join`} style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          marginTop: 14, padding: "10px 18px", borderRadius: 8,
+          background: YLW, color: BLK, fontWeight: 800, fontSize: 13,
+          textDecoration: "none",
+        }}>
           Join or Sign In
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m9 18 6-6-6-6"/>
+          </svg>
         </Link>
       </section>
     );
   }
 
   return (
-    <section className="mt-4 rounded-md border border-slate-200 bg-white p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">Your Progress</h2>
-        <button className="text-sm font-medium text-brand" onClick={load} type="button">Refresh</button>
+    <section style={{
+      marginTop: 16, borderRadius: 14, overflow: "hidden",
+      background: DARK, border: "1px solid #222",
+      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+      animation: "slide-up 0.35s ease-out both",
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: "14px 16px 12px",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        borderBottom: "1px solid #1f2130",
+      }}>
+        <div>
+          <p style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0 }}>Your Progress</p>
+          {lastUpdated && (
+            <p style={{ color: "#686a7d", fontSize: 9, marginTop: 3, letterSpacing: "0.04em" }}>
+              UPDATED {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </p>
+          )}
+        </div>
+        <button
+          onClick={() => { setRefreshing(true); void load(); }}
+          style={{
+            display: "flex", alignItems: "center", gap: 6,
+            padding: "7px 12px", borderRadius: 7,
+            background: "#242636", border: "1px solid #282b3a",
+            color: refreshing ? YLW : "#8b8fa8", fontSize: 11, fontWeight: 700,
+            cursor: "pointer", touchAction: "manipulation",
+            transition: "color 150ms",
+          }}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}>
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+            <path d="M21 3v5h-5"/>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+            <path d="M8 16H3v5"/>
+          </svg>
+          Refresh
+        </button>
       </div>
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <div><dt className="text-slate-600">Score</dt><dd className="text-lg font-semibold text-ink">{attendee.competition_score}</dd></div>
-        <div><dt className="text-slate-600">Rank</dt><dd className="text-lg font-semibold text-ink">{ownRank ? `#${ownRank.rank}` : "Pending"}</dd></div>
-        <div><dt className="text-slate-600">Spendable</dt><dd className="text-lg font-semibold text-ink">{attendee.spendable_balance}</dd></div>
-        <div><dt className="text-slate-600">Rewards</dt><dd className="text-lg font-semibold text-ink">{rewardCount}</dd></div>
-      </dl>
-      <p className="mt-3 text-xs text-slate-600">
-        {attendee.is_verified ? "Email verified" : "Verify email for prize eligibility"} · {attendee.checked_in_at ? "Checked in" : "Check-in pending"}
-      </p>
-      {status ? <p className="mt-2 text-xs text-slate-500">{status}</p> : null}
+
+      {/* Stats grid */}
+      <div style={{ padding: "14px 14px 12px", display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+        <StatCard label="SCORE" value={attendee?.competition_score ?? 0} accent big />
+        <StatCard label="RANK" value={ownRank ? `#${ownRank.rank}` : "—"} />
+        <StatCard label="BALANCE" value={attendee?.spendable_balance ?? 0} />
+        <StatCard label="REWARDS" value={rewardCount} />
+      </div>
+
+      {/* Status bar */}
+      <div style={{
+        padding: "9px 16px",
+        borderTop: "1px solid #1f2130",
+        display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
+      }}>
+        <StatusDot active={!!attendee?.is_verified} label={attendee?.is_verified ? "Verified" : "Unverified"} warn={!attendee?.is_verified} />
+        <StatusDot active={!!attendee?.checked_in_at} label={attendee?.checked_in_at ? "Checked in" : "Not checked in"} />
+        {status && <span style={{ color: "#787b8f", fontSize: 11 }}>{status}</span>}
+      </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </section>
   );
 }

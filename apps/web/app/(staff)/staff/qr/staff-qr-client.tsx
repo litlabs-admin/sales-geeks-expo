@@ -2,13 +2,13 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
-import ScanQrCode, { signedScanPath } from "@/lib/scan-qr-code";
+import QRCode from "qrcode";
 
-type EventSummary = {
-  id: string;
-  slug: string;
-  name: string;
-};
+const YLW = "#FFD000";
+const DARK = "#1e2028";
+const BORDER = "#242636";
+
+type EventSummary = { id: string; slug: string; name: string };
 
 type Campaign = {
   id: string;
@@ -25,68 +25,126 @@ type Campaign = {
 };
 
 const qrTypes = [
-  ["guest_speaker", "Guest speaker"],
+  ["guest_speaker",  "Guest speaker"],
   ["ad_hoc_session", "Ad-hoc session"],
-  ["bonus_zone", "Bonus zone"],
-  ["workshop", "Workshop"],
-  ["vip", "VIP"],
-  ["networking", "Networking"],
-  ["sponsor", "Sponsor booth"],
-  ["session", "Session"],
-  ["hidden_bonus", "Hidden bonus"]
+  ["bonus_zone",     "Bonus zone"],
+  ["workshop",       "Workshop"],
+  ["vip",            "VIP"],
+  ["networking",     "Networking"],
+  ["sponsor",        "Sponsor booth"],
+  ["session",        "Session"],
+  ["hidden_bonus",   "Hidden bonus"],
 ];
+
+const typeColors: Record<string, string> = {
+  guest_speaker:  "#6366f1",
+  ad_hoc_session: "#10b981",
+  bonus_zone:     "#f59e0b",
+  workshop:       "#3b82f6",
+  vip:            "#FFD000",
+  networking:     "#ec4899",
+  sponsor:        "#8b5cf6",
+  session:        "#06b6d4",
+  hidden_bonus:   "#f97316",
+};
+
+function CampaignQr({ slug, code, signature }: { slug: string; code: string; signature: string }) {
+  const [dataUrl, setDataUrl] = useState("");
+  const path = `/${slug}/scan/${code}?sig=${signature}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    void QRCode.toDataURL(`${window.location.origin}${path}`, {
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 160,
+      color: { dark: "#17191d", light: "#ffffff" },
+    }).then((url) => { if (!cancelled) setDataUrl(url); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [path]);
+
+  return (
+    <div className="sg-qr-row">
+      <div style={{
+        width: 90, height: 90, flexShrink: 0, borderRadius: 10,
+        background: "#fff", border: `1px solid ${BORDER}`,
+        display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+      }}>
+        {dataUrl
+          ? <img src={dataUrl} alt="QR" width={90} height={90} />
+          : <span style={{ fontSize: 10, color: "#787b8f" }}>…</span>
+        }
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <p style={{ color: "#787b8f", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", margin: 0 }}>SCAN URL</p>
+        <p style={{ color: "#8b8fa8", fontSize: 10, marginTop: 4, wordBreak: "break-all", lineHeight: 1.5 }}>{path}</p>
+      </div>
+    </div>
+  );
+}
+
+function FieldLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p style={{ color: "#787b8f", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", margin: "0 0 6px" }}>
+      {children}
+    </p>
+  );
+}
+
+const inputStyle: React.CSSProperties = {
+  width: "100%", boxSizing: "border-box",
+  background: "#17191d", border: `1px solid ${BORDER}`,
+  borderRadius: 8, padding: "10px 12px",
+  color: "white", fontSize: 13, outline: "none",
+};
 
 export default function StaffQrClient({ events }: { events: EventSummary[] }) {
   const [eventId, setEventId] = useState(events[0]?.id ?? "");
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [status, setStatus] = useState("");
+  const [statusKind, setStatusKind] = useState<"ok" | "err">("ok");
   const [busy, setBusy] = useState(false);
-  const selectedEvent = useMemo(() => events.find((event) => event.id === eventId), [eventId, events]);
+  const [loading, setLoading] = useState(false);
+  const selectedEvent = useMemo(() => events.find((e) => e.id === eventId), [eventId, events]);
 
   async function authHeaders() {
     const supabase = createBrowserSupabaseClient();
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     if (!token) throw new Error("Your session has expired. Sign in again.");
-    return {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json"
-    };
+    return { authorization: `Bearer ${token}`, "content-type": "application/json" };
   }
 
   async function loadCampaigns() {
     if (!eventId) return;
-    setStatus("Loading QR campaigns...");
+    setLoading(true);
     try {
       const headers = await authHeaders();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/staff/qr-campaigns?event_id=${eventId}`, {
-        headers,
-        cache: "no-store"
-      });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Could not load QR campaigns");
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/staff/qr-campaigns?event_id=${eventId}`, { headers, cache: "no-store" });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error ?? "Could not load QR campaigns");
       setCampaigns(payload.campaigns ?? []);
       setStatus("");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not load QR campaigns");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not load QR campaigns");
+      setStatusKind("err");
+    } finally {
+      setLoading(false);
     }
   }
 
-  useEffect(() => {
-    void loadCampaigns();
-  }, [eventId]);
+  useEffect(() => { void loadCampaigns(); }, [eventId]);
 
-  async function createCampaign(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
+  async function createCampaign(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const formEl = e.currentTarget;
+    const form = new FormData(formEl);
     setBusy(true);
-    setStatus("Creating QR campaign...");
+    setStatus("");
     try {
       const headers = await authHeaders();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/staff/qr-campaigns`, {
-        method: "POST",
-        headers,
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/staff/qr-campaigns`, {
+        method: "POST", headers,
         body: JSON.stringify({
           event_id: eventId,
           type: form.get("type"),
@@ -94,128 +152,313 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
           reason: form.get("reason"),
           points: form.get("points"),
           zone_hint: form.get("zone_hint"),
-          max_scans: form.get("max_scans")
-        })
+          max_scans: form.get("max_scans"),
+        }),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Could not create QR campaign");
-      setCampaigns((current) => [payload.qr, ...current]);
-      formElement.reset();
-      setStatus("QR campaign ready.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not create QR campaign");
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error ?? "Could not create QR campaign");
+      setCampaigns((prev) => [payload.qr, ...prev]);
+      formEl.reset();
+      setStatus("QR campaign created.");
+      setStatusKind("ok");
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not create QR campaign");
+      setStatusKind("err");
     } finally {
       setBusy(false);
     }
   }
 
-  async function setState(id: string, action: "activate" | "deactivate") {
+  async function setStateToggle(id: string, action: "activate" | "deactivate") {
     setBusy(true);
     try {
       const headers = await authHeaders();
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/staff/qr-campaigns/${id}/${action}`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({})
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/staff/qr-campaigns/${id}/${action}`, {
+        method: "POST", headers, body: JSON.stringify({}),
       });
-      const payload = await response.json();
-      if (!response.ok) throw new Error(payload.error ?? "Could not update QR campaign");
-      setCampaigns((current) => current.map((campaign) => (campaign.id === id ? payload.qr : campaign)));
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Could not update QR campaign");
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload.error ?? "Could not update QR campaign");
+      setCampaigns((prev) => prev.map((c) => (c.id === id ? payload.qr : c)));
+    } catch (err) {
+      setStatus(err instanceof Error ? err.message : "Could not update QR campaign");
+      setStatusKind("err");
     } finally {
       setBusy(false);
     }
   }
 
-  return (
-    <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-      <form className="grid gap-4 rounded-md border border-slate-200 bg-white p-4" onSubmit={createCampaign}>
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">Event</span>
-          <select className="rounded-md border border-slate-300 px-3 py-2" onChange={(event) => setEventId(event.target.value)} value={eventId}>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>{event.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">QR type</span>
-          <select className="rounded-md border border-slate-300 px-3 py-2" name="type">
-            {qrTypes.map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">Campaign name</span>
-          <input className="rounded-md border border-slate-300 px-3 py-2" name="campaign_name" required />
-        </label>
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">Operator note</span>
-          <input className="rounded-md border border-slate-300 px-3 py-2" name="reason" required />
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Points</span>
-            <input className="rounded-md border border-slate-300 px-3 py-2" min="0" name="points" required type="number" />
-          </label>
-          <label className="grid gap-1 text-sm">
-            <span className="font-medium">Max scans</span>
-            <input className="rounded-md border border-slate-300 px-3 py-2" min="1" name="max_scans" type="number" />
-          </label>
-        </div>
-        <label className="grid gap-1 text-sm">
-          <span className="font-medium">Zone hint</span>
-          <input className="rounded-md border border-slate-300 px-3 py-2" name="zone_hint" />
-        </label>
-        <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-60" disabled={busy || !selectedEvent} type="submit">
-          Create QR
-        </button>
-        {status ? <p className="text-sm text-slate-600">{status}</p> : null}
-      </form>
+  const active = campaigns.filter((c) => c.active);
+  const inactive = campaigns.filter((c) => !c.active);
 
-      <section className="rounded-md border border-slate-200 bg-white p-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-ink">Live campaigns</h2>
-          <button className="rounded-md border border-slate-200 px-3 py-2 text-sm font-medium" onClick={loadCampaigns} type="button">
-            Refresh
-          </button>
-        </div>
-        <div className="mt-4 grid gap-3">
-          {campaigns.length === 0 ? <p className="text-sm text-slate-600">No QR campaigns yet.</p> : null}
-          {campaigns.map((campaign) => (
-            <article className="rounded-md border border-slate-200 p-3" key={campaign.id}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-semibold text-ink">{campaign.campaign_name ?? campaign.type}</h3>
-                  <p className="mt-1 text-xs text-slate-600">{campaign.type} · {campaign.points} points · {campaign.status}</p>
-                  <ScanQrCode
-                    label={campaign.campaign_name ?? campaign.type}
-                    path={signedScanPath({
-                      slug: selectedEvent?.slug ?? "event",
-                      code: campaign.code,
-                      signature: campaign.signature
-                    })}
-                  />
-                </div>
-                <button
-                  className="rounded-md border border-slate-200 px-3 py-2 text-xs font-semibold"
-                  disabled={busy}
-                  onClick={() => setState(campaign.id, campaign.active ? "deactivate" : "activate")}
-                  type="button"
-                >
-                  {campaign.active ? "Deactivate" : "Activate"}
-                </button>
+  return (
+    <>
+      <style>{`
+        .sg-staff-grid {
+          display: grid;
+          gap: 20px;
+          grid-template-columns: 1fr;
+        }
+        @media (min-width: 900px) {
+          .sg-staff-grid {
+            grid-template-columns: minmax(0,1fr) minmax(0,1.25fr);
+            align-items: start;
+          }
+        }
+        .sg-qr-row {
+          display: flex;
+          gap: 14px;
+          align-items: flex-start;
+          margin-top: 14px;
+        }
+        .sg-campaign-header {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .sg-stats-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 10px;
+          margin-top: 14px;
+          padding-top: 14px;
+          border-top: 1px solid ${BORDER};
+        }
+        .sg-input:focus {
+          border-color: rgba(255,208,0,0.4) !important;
+        }
+        .sg-toggle-btn:hover:not(:disabled) {
+          opacity: 0.85;
+        }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
+
+      <div className="sg-staff-grid">
+
+        {/* ── Create form ── */}
+        <form onSubmit={createCampaign} style={{
+          background: DARK, border: `1px solid ${BORDER}`,
+          borderRadius: 16, overflow: "hidden",
+          display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}` }}>
+            <p style={{ color: "white", fontSize: 14, fontWeight: 700, margin: 0 }}>Create QR Campaign</p>
+            <p style={{ color: "#787b8f", fontSize: 11, margin: "2px 0 0" }}>New codes go live immediately when activated</p>
+          </div>
+
+          <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
+
+            <div>
+              <FieldLabel>EVENT</FieldLabel>
+              <select className="sg-input" style={inputStyle} value={eventId} onChange={(e) => setEventId(e.target.value)}>
+                {events.map((ev) => <option key={ev.id} value={ev.id}>{ev.name}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <FieldLabel>QR TYPE</FieldLabel>
+              <select className="sg-input" style={inputStyle} name="type">
+                {qrTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <FieldLabel>CAMPAIGN NAME</FieldLabel>
+              <input className="sg-input" style={inputStyle} name="campaign_name" required placeholder="e.g. Katy Morrison Talk" />
+            </div>
+
+            <div>
+              <FieldLabel>OPERATOR NOTE</FieldLabel>
+              <input className="sg-input" style={inputStyle} name="reason" required placeholder="Internal reference" />
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div>
+                <FieldLabel>POINTS</FieldLabel>
+                <input className="sg-input" style={inputStyle} name="points" type="number" min="0" required placeholder="10" />
               </div>
-              <dl className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600">
-                <div><dt>Total scans</dt><dd className="font-semibold text-ink">{campaign.total_scans ?? 0}</dd></div>
-                <div><dt>Unique attendees</dt><dd className="font-semibold text-ink">{campaign.unique_attendees ?? 0}</dd></div>
-              </dl>
-            </article>
-          ))}
-        </div>
-      </section>
-    </div>
+              <div>
+                <FieldLabel>MAX SCANS</FieldLabel>
+                <input className="sg-input" style={inputStyle} name="max_scans" type="number" min="1" placeholder="Unlimited" />
+              </div>
+            </div>
+
+            <div>
+              <FieldLabel>ZONE HINT <span style={{ color: "#686a7d", fontWeight: 500 }}>(optional)</span></FieldLabel>
+              <input className="sg-input" style={inputStyle} name="zone_hint" placeholder="e.g. Main Hall North" />
+            </div>
+
+            {status && (
+              <div style={{
+                borderRadius: 8, padding: "9px 13px", fontSize: 12, fontWeight: 600,
+                background: statusKind === "ok" ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
+                border: `1px solid ${statusKind === "ok" ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
+                color: statusKind === "ok" ? "#10b981" : "#f87171",
+              }}>
+                {status}
+              </div>
+            )}
+          </div>
+
+          <div style={{ padding: "0 20px 20px" }}>
+            <button
+              type="submit"
+              disabled={busy || !selectedEvent}
+              style={{
+                width: "100%", padding: "12px 0",
+                borderRadius: 10, border: "none",
+                background: busy || !selectedEvent ? "#282b3a" : YLW,
+                color: busy || !selectedEvent ? "#686a7d" : "#17191d",
+                fontWeight: 800, fontSize: 13,
+                cursor: busy || !selectedEvent ? "default" : "pointer",
+                letterSpacing: "0.04em", transition: "all 150ms",
+                touchAction: "manipulation",
+              }}>
+              {busy ? "Creating…" : "Create QR Campaign"}
+            </button>
+          </div>
+        </form>
+
+        {/* ── Campaign list ── */}
+        <section style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Header */}
+          <div style={{
+            background: DARK, border: `1px solid ${BORDER}`, borderRadius: 12,
+            padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <p style={{ color: "white", fontSize: 14, fontWeight: 700, margin: 0 }}>Live Campaigns</p>
+              <span style={{
+                fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 16,
+                color: YLW, background: "rgba(255,208,0,0.1)", borderRadius: 6,
+                padding: "1px 10px", border: "1px solid rgba(255,208,0,0.2)",
+              }}>
+                {active.length}
+              </span>
+            </div>
+            <button
+              type="button" onClick={loadCampaigns} disabled={loading}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "8px 14px", borderRadius: 8,
+                background: "#17191d", border: `1px solid ${BORDER}`,
+                color: loading ? YLW : "#9294a8", fontSize: 11, fontWeight: 700,
+                cursor: loading ? "default" : "pointer", transition: "color 150ms",
+                touchAction: "manipulation",
+              }}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                strokeLinecap="round" strokeLinejoin="round"
+                style={{ animation: loading ? "spin 0.8s linear infinite" : "none" }}>
+                <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/>
+                <path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/>
+                <path d="M8 16H3v5"/>
+              </svg>
+              {loading ? "Loading…" : "Refresh"}
+            </button>
+          </div>
+
+          {campaigns.length === 0 && !loading && (
+            <div style={{
+              background: DARK, border: `1px solid ${BORDER}`, borderRadius: 14,
+              padding: "40px 24px", textAlign: "center",
+            }}>
+              <p style={{ color: "#8b8fa8", fontSize: 13 }}>No QR campaigns yet. Create one to get started.</p>
+            </div>
+          )}
+
+          {[...active, ...inactive].map((campaign) => {
+            const typeColor = typeColors[campaign.type] ?? "#8b8fa8";
+            return (
+              <article key={campaign.id} style={{
+                background: DARK,
+                border: `1px solid ${campaign.active ? "rgba(255,208,0,0.15)" : BORDER}`,
+                borderRadius: 14, overflow: "hidden",
+                boxShadow: campaign.active ? "0 0 20px rgba(255,208,0,0.04)" : "none",
+              }}>
+                {/* Card header */}
+                <div style={{ padding: "14px 16px", borderBottom: `1px solid ${BORDER}` }}>
+                  <div className="sg-campaign-header">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{
+                          width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+                          background: campaign.active ? "#10b981" : "#686a7d",
+                          boxShadow: campaign.active ? "0 0 0 3px rgba(16,185,129,0.2)" : "none",
+                        }} />
+                        <h3 style={{ color: "white", fontWeight: 700, fontSize: 14, margin: 0 }}>
+                          {campaign.campaign_name ?? campaign.type}
+                        </h3>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, padding: "3px 9px",
+                          borderRadius: 5, background: `${typeColor}18`,
+                          border: `1px solid ${typeColor}35`, color: typeColor,
+                        }}>
+                          {campaign.type.replace(/_/g, " ")}
+                        </span>
+                        <span style={{
+                          color: YLW, fontSize: 12, fontWeight: 800,
+                          fontFamily: "'Barlow Condensed', sans-serif",
+                        }}>
+                          {campaign.points} pts
+                        </span>
+                        <span style={{ color: campaign.active ? "#10b981" : "#686a7d", fontSize: 11, fontWeight: 600 }}>
+                          {campaign.active ? "active" : "inactive"}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      className="sg-toggle-btn"
+                      disabled={busy}
+                      onClick={() => void setStateToggle(campaign.id, campaign.active ? "deactivate" : "activate")}
+                      style={{
+                        flexShrink: 0, padding: "9px 16px", borderRadius: 8,
+                        fontSize: 12, fontWeight: 700,
+                        cursor: busy ? "default" : "pointer", transition: "all 150ms",
+                        background: campaign.active ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
+                        border: `1px solid ${campaign.active ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)"}`,
+                        color: campaign.active ? "#f87171" : "#10b981",
+                        opacity: busy ? 0.5 : 1,
+                        touchAction: "manipulation",
+                        whiteSpace: "nowrap",
+                      }}>
+                      {campaign.active ? "Deactivate" : "Activate"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* QR + stats */}
+                <div style={{ padding: "14px 16px" }}>
+                  {selectedEvent && (
+                    <CampaignQr slug={selectedEvent.slug} code={campaign.code} signature={campaign.signature} />
+                  )}
+                  <div className="sg-stats-grid">
+                    {[
+                      { label: "TOTAL SCANS", value: campaign.total_scans ?? 0 },
+                      { label: "UNIQUE ATTENDEES", value: campaign.unique_attendees ?? 0 },
+                    ].map(({ label, value }) => (
+                      <div key={label} style={{
+                        background: "#17191d", border: `1px solid ${BORDER}`,
+                        borderRadius: 8, padding: "10px 12px",
+                      }}>
+                        <p style={{ color: "#787b8f", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", margin: 0 }}>{label}</p>
+                        <p style={{
+                          fontFamily: "'Barlow Condensed', sans-serif",
+                          fontWeight: 800, fontSize: 22, color: "white", margin: "2px 0 0", lineHeight: 1,
+                        }}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      </div>
+    </>
   );
 }

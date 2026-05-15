@@ -6,7 +6,7 @@ config({ path: ".env.local" });
 
 const databaseUrl = process.env.DATABASE_URL;
 const jwtSecret = process.env.SUPABASE_JWT_SECRET;
-const backendUrl = process.env.BACKEND_URL?.replace(/\/health$/, "") ?? "http://localhost:8080";
+const backendUrl = process.env.BACKEND_URL?.replace(/\/health$/, "") ?? "http://localhost:8081";
 
 if (!databaseUrl || !jwtSecret) {
   throw new Error("DATABASE_URL and SUPABASE_JWT_SECRET are required");

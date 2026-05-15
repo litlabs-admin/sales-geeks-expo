@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { backendBaseUrl } from "@/lib/config";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 
-type CallbackMode = "attendee" | "staff" | "admin";
+type CallbackMode = "attendee" | "staff" | "admin" | "business";
 
 type ActorResponse = {
   actor?: {
@@ -16,13 +16,13 @@ function safeNextPath(value: string | null, fallback: string) {
 }
 
 function modeFrom(value: string | null): CallbackMode {
-  if (value === "admin" || value === "staff") return value;
+  if (value === "admin" || value === "staff" || value === "business") return value;
   return "attendee";
 }
 
 function eventSlugFrom(next: string) {
   const firstSegment = next.split("/")[1];
-  return firstSegment && !["admin", "staff", "auth", "api", "dev", "login"].includes(firstSegment)
+  return firstSegment && !["admin", "staff", "business", "auth", "api", "dev", "login"].includes(firstSegment)
     ? firstSegment
     : null;
 }
@@ -34,11 +34,18 @@ function redirectTo(request: NextRequest, path: string) {
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const mode = modeFrom(searchParams.get("mode"));
-  const fallback = mode === "admin" ? "/admin/events" : mode === "staff" ? "/staff/qr" : "/";
+  const fallback =
+    mode === "admin" ? "/admin/events" :
+    mode === "staff" ? "/staff/qr" :
+    mode === "business" ? "/business/dashboard" :
+    "/";
   const next = safeNextPath(searchParams.get("next"), fallback);
   const eventSlug = searchParams.get("eventSlug") ?? eventSlugFrom(next);
   const loginPath =
-    mode === "admin" ? "/admin/login" : mode === "staff" ? "/staff/login" : eventSlug ? `/${eventSlug}/join` : "/login";
+    mode === "admin" ? "/admin/login" :
+    mode === "staff" ? "/staff/login" :
+    mode === "business" ? "/business/login" :
+    eventSlug ? `/${eventSlug}/join` : "/login";
   const errorDescription = searchParams.get("error_description");
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
@@ -76,6 +83,11 @@ export async function GET(request: NextRequest) {
 
   if (mode === "staff" && role !== "staff" && role !== "admin") {
     return redirectTo(request, "/access-denied?required=staff");
+  }
+
+  // Business users: no extra setup needed — they land on their dashboard
+  if (mode === "business") {
+    return redirectTo(request, next);
   }
 
   if (mode === "attendee") {

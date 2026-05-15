@@ -30,15 +30,6 @@ await sql`
       'pre_event',
       '{"primary":"18 110 130","ink":"18 23 28","logo_url":null}'::jsonb,
       '{}'::jsonb
-    ),
-    (
-      'sge-2027',
-      'Scottish Growth Expo 2027',
-      '2027-05-26T08:30:00+01:00',
-      '2027-05-26T17:00:00+01:00',
-      'pre_event',
-      '{"primary":"120 54 15","ink":"18 23 28","logo_url":null}'::jsonb,
-      '{}'::jsonb
     )
   on conflict (slug) do update
     set name = excluded.name,
@@ -50,4 +41,4 @@ await sql`
 `;
 
 await sql.end();
-console.log("Seeded Phase 1 events.");
+console.log("Seeded SGE 2026 event.");

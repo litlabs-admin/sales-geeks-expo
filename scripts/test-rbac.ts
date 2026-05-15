@@ -3,7 +3,7 @@ import { SignJWT } from "jose";
 
 config({ path: ".env.local" });
 
-const backendUrl = process.env.BACKEND_ADMIN_TEST_URL ?? "http://localhost:8080/test/admin-only";
+const backendUrl = process.env.BACKEND_ADMIN_TEST_URL ?? "http://localhost:8081/test/admin-only";
 const secret = process.env.SUPABASE_JWT_SECRET;
 
 if (!secret) {

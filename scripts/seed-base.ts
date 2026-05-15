@@ -119,5 +119,27 @@ const attendeeEmail = process.env.DEV_ATTENDEE_EMAIL ?? "attendee+sgexpo@litlabs
 const attendeeUserId = await ensureUser(attendeeEmail, "attendee");
 await ensureSeedAttendee({ eventId, userId: attendeeUserId, email: attendeeEmail });
 
+// Seed business user (uses attendee role in auth system; looked up by contact_email in businesses table)
+const businessEmail = process.env.DEV_BUSINESS_EMAIL ?? "business+sgexpo@litlabs.io";
+await ensureUser(businessEmail, "attendee"); // business users have attendee role at auth level
+
+await sql`
+  insert into public.businesses (event_id, name, contact_email, sponsor_tier, website_url)
+  values (
+    ${eventId},
+    'Dev Business Corp',
+    ${businessEmail},
+    'Growth Ecosystem',
+    'https://devbusiness.example.com'
+  )
+  on conflict (event_id, name) do update
+    set contact_email = excluded.contact_email,
+        sponsor_tier = excluded.sponsor_tier,
+        website_url = excluded.website_url,
+        archived_at = null,
+        updated_at = now()
+`;
+
 await sql.end();
-console.log("Seeded base event and dev role accounts.");
+console.log("Seeded base event and dev role accounts (admin, staff, attendee, business).");
+

@@ -8,6 +8,7 @@ const ignoredFirstSegments = new Set([
   "api",
   "admin",
   "staff",
+  "business",
   "auth",
   "access-denied",
   "dev",
@@ -15,6 +16,7 @@ const ignoredFirstSegments = new Set([
   "login",
   "favicon.ico"
 ]);
+
 
 type PublicEvent = {
   id: string;

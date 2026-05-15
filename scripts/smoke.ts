@@ -4,7 +4,7 @@ config({ path: ".env.local" });
 
 const rawWebUrl = process.env.WEB_URL ?? "http://localhost:3000/health";
 const webUrl = rawWebUrl.endsWith("/health") ? rawWebUrl : `${rawWebUrl.replace(/\/$/, "")}/health`;
-const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8080/health";
+const backendUrl = process.env.BACKEND_URL ?? "http://localhost:8081/health";
 
 async function check(url: string) {
   const response = await fetch(url);

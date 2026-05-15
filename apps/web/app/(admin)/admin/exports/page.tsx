@@ -1,10 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import AdminExportsClient from "./exports-client";
 
-type EventSummary = {
-  id: string;
-  name: string;
-};
+type EventSummary = { id: string; name: string };
 
 export default async function AdminExportsPage() {
   const supabase = createServerSupabaseClient();
@@ -16,10 +13,13 @@ export default async function AdminExportsPage() {
   if (error) throw new Error(error.message);
 
   return (
-    <main className="mx-auto min-h-screen max-w-4xl px-6 py-8">
-      <h1 className="text-2xl font-semibold text-ink">Exports</h1>
-      <p className="mt-2 text-sm text-slate-600">Generate current CSV exports with admin audit records.</p>
+    <div className="max-w-3xl">
+      <div style={{ marginBottom: 28 }}>
+        <p style={{ color: "#FFD000", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>ADMIN</p>
+        <h1 style={{ color: "white", fontSize: 26, fontWeight: 900, margin: "4px 0 0", letterSpacing: "-0.02em" }}>Exports</h1>
+        <p style={{ color: "#8b8fa8", fontSize: 13, marginTop: 4 }}>Generate CSV exports with full audit records for any event dataset.</p>
+      </div>
       <AdminExportsClient events={(events ?? []) as EventSummary[]} />
-    </main>
+    </div>
   );
 }

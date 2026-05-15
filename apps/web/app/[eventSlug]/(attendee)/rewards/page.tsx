@@ -18,10 +18,5 @@ export default async function RewardsPage({ params }: { params: { eventSlug: str
     return <main className="p-6">Event not found.</main>;
   }
 
-  return (
-    <main className="mx-auto max-w-xl px-6 py-8">
-      <h1 className="text-2xl font-semibold text-ink">Rewards</h1>
-      <RewardsClient eventId={event.id} />
-    </main>
-  );
+  return <RewardsClient eventId={event.id} />;
 }

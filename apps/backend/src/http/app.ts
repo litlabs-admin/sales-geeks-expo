@@ -4,7 +4,7 @@ import { HTTPException } from "hono/http-exception";
 import { randomUUID } from "node:crypto";
 import { sql } from "../db/client";
 import { env } from "../env";
-import { getAttendee, recordPendingScan, updateAttendee, upsertAttendee } from "./attendees";
+import { getAttendee, getAttendeeScans, recordPendingScan, updateAttendee, upsertAttendee } from "./attendees";
 import { requireRole, requireSupabaseJwt } from "./auth";
 import {
   agenda,
@@ -19,9 +19,12 @@ import {
   archiveBusiness,
   createBusiness,
   createMiscQr,
+  generateBusinessQr,
+  getBusinessProfile,
   listQrCampaigns,
   listBusinesses,
   qrCampaignAnalytics,
+  selfRegisterBusiness,
   setQrCampaignState,
   updateBusiness,
   verifyScanSignature
@@ -44,6 +47,7 @@ import {
 } from "./notifications";
 import { archiveMutationGuard, createAccessOverride } from "./archive";
 import { exportCsv } from "./exports";
+import { recordConnection, getMyConnections, getConnectionLeaderboard, sendConnectionEmails } from "./connections";
 
 export function createApp() {
   const app = new Hono();
@@ -104,12 +108,16 @@ export function createApp() {
   });
 
   app.get("/attendees/me", requireSupabaseJwt, getAttendee);
+  app.get("/attendees/me/scans", requireSupabaseJwt, getAttendeeScans);
   app.post("/attendees/upsert", requireSupabaseJwt, upsertAttendee);
   app.post("/attendees/update", requireSupabaseJwt, updateAttendee);
   app.post("/scan/presignup", requireSupabaseJwt, recordPendingScan);
   app.get("/scan/:code", verifyScanSignature);
   app.post("/scan/:code", requireSupabaseJwt, archiveMutationGuard, awardScanRoute);
   app.get("/leaderboard", requireSupabaseJwt, getLeaderboard);
+  app.get("/leaderboard/connections", requireSupabaseJwt, getConnectionLeaderboard);
+  app.post("/attendees/connect", requireSupabaseJwt, archiveMutationGuard, recordConnection);
+  app.get("/attendees/connections", requireSupabaseJwt, getMyConnections);
   app.get("/rewards", requireSupabaseJwt, listRewards);
   app.post("/rewards/redeem", requireSupabaseJwt, archiveMutationGuard, redeemRewardRoute);
   app.post("/rewards/william/claim", requireSupabaseJwt, archiveMutationGuard, claimWilliamRoute);
@@ -133,6 +141,9 @@ export function createApp() {
   app.post("/admin/businesses", requireSupabaseJwt, requireRole("admin"), createBusiness);
   app.patch("/admin/businesses/:id", requireSupabaseJwt, requireRole("admin"), updateBusiness);
   app.post("/admin/businesses/:id/archive", requireSupabaseJwt, requireRole("admin"), archiveBusiness);
+  app.post("/admin/businesses/:id/generate-qr", requireSupabaseJwt, requireRole("admin"), generateBusinessQr);
+  app.post("/business/register", selfRegisterBusiness);
+  app.get("/business/profile", requireSupabaseJwt, getBusinessProfile);
   app.get("/admin/qr", requireSupabaseJwt, requireRole("admin"), listQrCampaigns);
   app.post("/admin/qr", requireSupabaseJwt, requireRole("admin"), createMiscQr);
   app.post("/admin/qr/:id/activate", requireSupabaseJwt, requireRole("admin"), setQrCampaignState);
@@ -160,6 +171,7 @@ export function createApp() {
     requireRole("admin"),
     transitionEvent
   );
+  app.post("/admin/connections/send-emails", requireSupabaseJwt, requireRole("admin"), sendConnectionEmails);
 
   return app;
 }

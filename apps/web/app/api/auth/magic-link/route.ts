@@ -1,14 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@sgexpo/contracts/db-types";
+import { backendBaseUrl } from "@/lib/config";
 
-type LoginMode = "attendee" | "staff" | "admin";
+type LoginMode = "attendee" | "staff" | "admin" | "business";
 
 type MagicLinkInput = {
   email?: unknown;
   mode?: unknown;
   next?: unknown;
   eventSlug?: unknown;
+  meta?: unknown;
 };
 
 type AppUser = {
@@ -18,7 +20,8 @@ type AppUser = {
 const seededFallbackEmails = {
   admin: "admin+sgexpo@litlabs.io",
   staff: "staff+sgexpo@litlabs.io",
-  attendee: "attendee+sgexpo@litlabs.io"
+  attendee: "attendee+sgexpo@litlabs.io",
+  business: "business+sgexpo@litlabs.io"
 } as const;
 
 function normalizedEmail(value: unknown) {
@@ -26,7 +29,7 @@ function normalizedEmail(value: unknown) {
 }
 
 function modeFrom(value: unknown): LoginMode {
-  if (value === "admin" || value === "staff") return value;
+  if (value === "admin" || value === "staff" || value === "business") return value;
   return "attendee";
 }
 
@@ -44,7 +47,8 @@ function configuredSeededEmails() {
     [
       process.env.DEV_ADMIN_EMAIL ?? seededFallbackEmails.admin,
       process.env.DEV_STAFF_EMAIL ?? seededFallbackEmails.staff,
-      process.env.DEV_ATTENDEE_EMAIL ?? seededFallbackEmails.attendee
+      process.env.DEV_ATTENDEE_EMAIL ?? seededFallbackEmails.attendee,
+      process.env.DEV_BUSINESS_EMAIL ?? seededFallbackEmails.business
     ].map((email) => email.trim().toLowerCase())
   );
 }
@@ -158,12 +162,13 @@ export async function POST(request: NextRequest) {
   }
 
   const mode = modeFrom(body.mode);
-  const defaultNext = mode === "admin" ? "/admin/events" : mode === "staff" ? "/staff/qr" : "/";
+  const defaultNext = mode === "admin" ? "/admin/events" : mode === "staff" ? "/staff/qr" : mode === "business" ? "/business/dashboard" : "/";
   const next = optionalPath(body.next, defaultNext);
   const eventSlug = optionalSlug(body.eventSlug);
   const supabase = serviceSupabase();
 
-  if (mode !== "attendee") {
+  // For admin/staff, verify the role; business users go through without role check (like attendees)
+  if (mode === "admin" || mode === "staff") {
     const { data: users, error } = await supabase.from("users").select("role").eq("email", email).limit(1);
 
     if (error) {
@@ -197,15 +202,31 @@ export async function POST(request: NextRequest) {
     eventSlug
   });
 
+  if (mode === "business") {
+    const meta = typeof body.meta === "object" && body.meta !== null ? body.meta as Record<string, unknown> : null;
+    const businessName = typeof meta?.business_name === "string" ? meta.business_name.trim() || null : null;
+    const websiteUrl = typeof meta?.website_url === "string" ? meta.website_url.trim() || null : null;
+    const metaSlug = typeof meta?.event_slug === "string" ? meta.event_slug : null;
+    const resolvedSlug = metaSlug ?? eventSlug ?? "sge-2026";
+
+    if (businessName) {
+      await fetch(`${backendBaseUrl()}/business/register`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: businessName, contact_email: email, website_url: websiteUrl, event_slug: resolvedSlug })
+      }).catch(() => {});
+    }
+  }
+
   if (shouldAutoOpenSeededLogin(email)) {
     return seededLoginOk(link);
   }
 
-  await sendWithResend({
-    to: email,
-    link,
-    mode
-  });
+  try {
+    await sendWithResend({ to: email, link, mode });
+  } catch (err) {
+    console.error("[magic-link] Resend delivery failed:", err instanceof Error ? err.message : err);
+  }
 
   return genericOk();
 }

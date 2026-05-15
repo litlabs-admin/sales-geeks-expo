@@ -10,7 +10,7 @@ export const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 export const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 export const jwtSecret = process.env.SUPABASE_JWT_SECRET;
 export const backendBaseUrl =
-  process.env.BACKEND_URL?.replace(/\/health$/, "") ?? "http://localhost:8080";
+  process.env.BACKEND_URL?.replace(/\/health$/, "") ?? "http://localhost:8081";
 
 if (!databaseUrl || !supabaseUrl || !anonKey || !serviceRoleKey || !jwtSecret) {
   throw new Error("Phase 2 scripts require Supabase and database env vars");
