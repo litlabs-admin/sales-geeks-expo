@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { backendBaseUrl } from "@/lib/config";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import ScanFab from "@/lib/scan-fab";
+import AddToHomeHint from "@/lib/add-to-home-hint";
 import AttendeeNav from "./attendee-nav";
 
 type MeResponse = {
@@ -83,6 +84,8 @@ export default async function AttendeeLayout({ children, params }: { children: R
           </svg>
         </Link>
       </div>
+
+      <AddToHomeHint />
 
       {children}
 

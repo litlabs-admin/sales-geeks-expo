@@ -1,5 +1,6 @@
 ﻿import Link from "next/link";
 import { requireRole } from "@/lib/auth";
+import AddToHomeHint from "@/lib/add-to-home-hint";
 
 export default async function StaffLayout({ children }: { children: React.ReactNode }) {
   const actor = await requireRole("staff");
@@ -43,6 +44,7 @@ export default async function StaffLayout({ children }: { children: React.ReactN
           </div>
         </div>
       </header>
+      <AddToHomeHint />
       {children}
     </div>
   );
