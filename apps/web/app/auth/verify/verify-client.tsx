@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -38,6 +38,38 @@ export default function VerifyClient() {
   const tokenHash = searchParams.get("token_hash");
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<"checking" | "needs-confirm" | "no-token">(
+    tokenHash ? "checking" : "no-token"
+  );
+
+  // If the user already has a live session (e.g. they re-opened the email
+  // link after accidentally closing the app), just send them to the
+  // destination. This does NOT touch the one-time token, so it stays secure
+  // and a scanner/bot — which has no session — still never auto-verifies.
+  useEffect(() => {
+    if (!tokenHash) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const { data } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (data.session?.access_token) {
+          router.replace(next);
+          router.refresh();
+          return;
+        }
+      } catch {
+        // fall through to manual confirm
+      }
+      if (!cancelled) setPhase("needs-confirm");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tokenHash, next, router]);
 
   async function confirmSignIn() {
     if (busy) return;
@@ -119,12 +151,16 @@ export default function VerifyClient() {
     }
   }
 
-  if (!tokenHash) {
+  if (phase === "no-token") {
     return (
       <p className="mt-4 text-sm text-slate-700">
         This sign-in link is missing its token. Please request a fresh link.
       </p>
     );
+  }
+
+  if (phase === "checking") {
+    return <p className="mt-4 text-sm text-slate-700">Checking your session...</p>;
   }
 
   return (
