@@ -92,16 +92,32 @@ export default function VerifyClient() {
         type: "magiclink"
       });
 
-      if (error || !data.session?.access_token) {
-        console.error("[verify] verifyOtp failed", error);
-        setStatus(
-          `Sign-in failed: ${error?.message ?? "no session returned"} (${(error as { code?: string } | null)?.code ?? error?.status ?? "unknown"}). Request a fresh link and tap Confirm promptly.`
-        );
+      let session = data.session ?? null;
+      if (error || !session?.access_token) {
+        // The one-time token may already be consumed because an earlier
+        // verification in THIS browser succeeded (back button, double
+        // open, prefetch). If a valid session now exists, the sign-in
+        // actually worked — continue instead of showing a scary error.
+        const { data: existing } = await supabase.auth.getSession();
+        if (existing.session?.access_token) {
+          session = existing.session;
+        } else {
+          console.error("[verify] verifyOtp failed", error);
+          setStatus(
+            `Sign-in failed: ${error?.message ?? "no session returned"} (${(error as { code?: string } | null)?.code ?? error?.status ?? "unknown"}). Request a fresh link and tap Confirm promptly.`
+          );
+          setBusy(false);
+          return;
+        }
+      }
+
+      if (!session?.access_token) {
+        setStatus("Could not establish a session. Request a fresh link and tap Confirm promptly.");
         setBusy(false);
         return;
       }
 
-      const token = data.session.access_token;
+      const token = session.access_token;
       const actorResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/me`, {
         headers: {
           authorization: `Bearer ${token}`
