@@ -105,6 +105,52 @@ export default function ProfileClient({ eventId, slug }: { eventId: string; slug
   const [data, setData] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [aliasEditing, setAliasEditing] = useState(false);
+  const [aliasInput, setAliasInput] = useState("");
+  const [aliasError, setAliasError] = useState("");
+  const [aliasSaving, setAliasSaving] = useState(false);
+
+  async function saveAlias() {
+    const v = aliasInput.trim();
+    if (v.length < 2 || v.length > 24) {
+      setAliasError("Use 2–24 characters.");
+      return;
+    }
+    setAliasSaving(true);
+    setAliasError("");
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { data: s } = await supabase.auth.getSession();
+      const token = s.session?.access_token;
+      if (!token) {
+        setAliasError("Session expired — sign in again.");
+        setAliasSaving(false);
+        return;
+      }
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/attendees/update`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ event_id: eventId, alias: v }),
+      });
+      if (res.status === 409) {
+        setAliasError("That name is already taken — try another.");
+        setAliasSaving(false);
+        return;
+      }
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setAliasError(body.error ?? "Could not save.");
+        setAliasSaving(false);
+        return;
+      }
+      setData((prev) => (prev ? { ...prev, attendee: { ...prev.attendee, alias: v } } : prev));
+      setAliasEditing(false);
+      setAliasSaving(false);
+    } catch {
+      setAliasError("Network error — try again.");
+      setAliasSaving(false);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -234,6 +280,61 @@ export default function ProfileClient({ eventId, slug }: { eventId: string; slug
             <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Email</p>
             <p className="text-sm font-semibold text-ink mt-0.5">{email}</p>
             <p className="text-[10px] text-slate-400 mt-0.5">Identity — cannot be changed</p>
+          </div>
+        )}
+      </div>
+
+      {/* Display name (editable, unique) */}
+      <div
+        className="rounded-2xl px-5 py-4"
+        style={{ background: "rgba(255,255,255,0.9)", border: "1px solid rgba(18,110,130,0.1)", boxShadow: "0 4px 20px rgba(18,110,130,0.08)" }}
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-medium">Display name</p>
+            {!aliasEditing && <p className="text-sm font-bold text-ink mt-0.5">{attendee.alias}</p>}
+          </div>
+          {!aliasEditing && (
+            <button
+              type="button"
+              onClick={() => { setAliasInput(attendee.alias); setAliasError(""); setAliasEditing(true); }}
+              className="text-xs font-semibold text-brand bg-brand/10 px-3 py-1.5 rounded-full"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+        {aliasEditing && (
+          <div className="mt-3">
+            <input
+              value={aliasInput}
+              maxLength={24}
+              autoFocus
+              onChange={(e) => setAliasInput(e.target.value)}
+              className="w-full rounded-lg px-3 py-2 text-sm"
+              style={{ border: "1px solid rgba(18,110,130,0.2)", background: "#fff", color: "#0f172a", outline: "none" }}
+            />
+            {aliasError && <p className="text-xs mt-1.5" style={{ color: "#dc2626" }}>{aliasError}</p>}
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={saveAlias}
+                disabled={aliasSaving}
+                className="text-xs font-bold px-4 py-2 rounded-lg text-white"
+                style={{ background: "rgb(var(--brand-primary))", opacity: aliasSaving ? 0.7 : 1 }}
+              >
+                {aliasSaving ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAliasEditing(false); setAliasError(""); }}
+                className="text-xs font-semibold px-4 py-2 rounded-lg"
+                style={{ background: "rgba(18,110,130,0.06)", color: "#475569" }}
+              >
+                Cancel
+              </button>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-2">Shown on the leaderboard. Must be unique.</p>
           </div>
         )}
       </div>

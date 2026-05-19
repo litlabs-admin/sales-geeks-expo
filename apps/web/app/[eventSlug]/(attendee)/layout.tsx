@@ -40,7 +40,7 @@ export default async function AttendeeLayout({ children, params }: { children: R
       redirect("/access-denied?required=attendee");
     }
 
-    await fetch(`${backendBaseUrl()}/attendees/upsert`, {
+    const upsertResponse = await fetch(`${backendBaseUrl()}/attendees/upsert`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${token}`,
@@ -48,6 +48,14 @@ export default async function AttendeeLayout({ children, params }: { children: R
       },
       body: JSON.stringify({ event_id: eventId })
     });
+    const upsertPayload = (await upsertResponse
+      .json()
+      .catch(() => ({}))) as { attendee?: { alias_set?: boolean } };
+
+    // First-time attendees pick a unique display name before entering the app.
+    if (upsertPayload.attendee?.alias_set === false) {
+      redirect(`/${slug}/welcome`);
+    }
   }
 
   return (

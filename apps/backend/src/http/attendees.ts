@@ -11,7 +11,24 @@ type AttendeeInput = {
   business_name?: unknown;
   phone?: unknown;
   email?: unknown;
+  alias?: unknown;
 };
+
+function validateAlias(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new HTTPException(400, { message: "Alias is required" });
+  }
+  const alias = value.trim();
+  if (alias.length < 2 || alias.length > 24) {
+    throw new HTTPException(400, { message: "Alias must be 2–24 characters" });
+  }
+  if (!/^[A-Za-z0-9 _-]+$/.test(alias)) {
+    throw new HTTPException(400, {
+      message: "Alias may only contain letters, numbers, spaces, hyphens and underscores"
+    });
+  }
+  return alias;
+}
 
 type PendingScanInput = {
   event_id?: unknown;
@@ -114,16 +131,28 @@ export async function updateAttendee(c: Context) {
     throw new HTTPException(403, { message: "Email is immutable" });
   }
 
-  const rows = await sql`
-    update public.attendees
-    set real_name = coalesce(${optionalString(body.real_name)}, real_name),
-        business_name = coalesce(${optionalString(body.business_name)}, business_name),
-        phone = coalesce(${optionalString(body.phone)}, phone),
-        updated_at = now()
-    where event_id = ${eventId}
-      and auth_user_id = ${actor.id}
-    returning *
-  `;
+  const aliasValue = body.alias !== undefined ? validateAlias(body.alias) : null;
+
+  let rows;
+  try {
+    rows = await sql`
+      update public.attendees
+      set real_name = coalesce(${optionalString(body.real_name)}, real_name),
+          business_name = coalesce(${optionalString(body.business_name)}, business_name),
+          phone = coalesce(${optionalString(body.phone)}, phone),
+          alias = coalesce(${aliasValue}, alias),
+          alias_set = alias_set or ${aliasValue !== null},
+          updated_at = now()
+      where event_id = ${eventId}
+        and auth_user_id = ${actor.id}
+      returning *
+    `;
+  } catch (error) {
+    if ((error as { code?: string })?.code === "23505") {
+      throw new HTTPException(409, { message: "That alias is already taken. Please choose another." });
+    }
+    throw error;
+  }
 
   if (!rows[0]) {
     throw new HTTPException(404, { message: "Attendee not found" });
