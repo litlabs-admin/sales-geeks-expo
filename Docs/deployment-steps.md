@@ -1,233 +1,180 @@
-# Deployment — Step by Step (fresh project, fresh VM, first-timer)
+# Deployment — Step by Step (existing `tarsha` VM, first-timer)
 
-Written for someone who has **never deployed anything**. We are deploying onto a **brand-new GCP project and a brand-new VM** (nothing existing is touched). Follow this top to bottom. Do not skip a step. After every step there is a **✓ CHECK** — do not continue until it passes.
+Written for someone who has **never deployed anything**. We deploy onto the **existing tarsha VM** (it already runs another app — this guide makes sure the two cannot collide). Follow top to bottom, do not skip. Every step ends with a **✓ CHECK** — do not continue until it passes.
 
 You will deploy:
-- **Backend + worker + cache (Redis)** → a new Google Cloud VM, using Docker
+- **Backend + worker + cache (Redis)** → the tarsha VM, using Docker
 - **Frontend (the phone website)** → Vercel, connected to GitHub
 
-All commands run in the **VSCode integrated terminal**. Open it: VSCode top menu **Terminal → New Terminal** (or press `Ctrl + ~`). Make sure the dropdown on the right of the terminal says **PowerShell**. Steps are marked **(PC terminal)** = the VSCode terminal on your computer, or **(VM)** = after you have SSH'd into the server (the same terminal window, but now connected to the VM).
+All commands run in the **VSCode integrated terminal** (Terminal → New Terminal, or `Ctrl + ~`; make sure it says **PowerShell**). Steps marked **(PC terminal)** run on your computer; **(VM)** steps run after you SSH into the server (same window, now connected to the VM).
+
+> ### ⚠️ The one thing that can break this: a port 80/443 conflict
+> The tarsha VM already runs another deployment. A firewall rule controls *network* access, but **two programs cannot listen on the same port**. If the existing app uses host port 80 or 443, the new web server (Caddy) will refuse to start. **Step 5 is a hard gate that checks this before anything is built.** Everything else here is conflict-proofed (the Docker stack is fully namespaced `sgexpo-*`, so containers/networks/volumes can never clash with the other app).
 
 ---
 
-## STEP 0 — Your values sheet (fill this in as you go)
+## STEP 0 — Fixed values (already correct — do not change)
 
-Keep this list somewhere (a note). You will create these values during the guide and reuse them constantly.
+| Name | Value |
+|---|---|
+| GCP project | `tarsha-ai-491715` |
+| VM external IP | `34.30.155.166` |
+| API address | `https://api.34-30-155-166.sslip.io` |
+| GitHub repo | `https://github.com/litlabs-admin/sales-geeks-expo.git` |
+| Branch | `main` |
 
-| Name | Value | You get it in |
+You will discover two values during the guide and should write them down:
+
+| Name | Value | Found in |
 |---|---|---|
-| `PROJECT_ID` | `__________` | Step 1.4 |
-| `VM_NAME` | `sgexpo-vm` (you can keep this) | Step 2.3 |
-| `ZONE` | `europe-west2-a` (you can keep this) | fixed |
-| `VM_IP` | `__________` | Step 2.4 |
-| `API_HOST` | `api.<VM_IP>.sslip.io` (fill once you have VM_IP) | Step 2.4 |
-| `VERCEL_URL` | `__________` (e.g. `https://xxxx.vercel.app`) | Step 7.1 |
+| `VM_NAME` | `__________` | Step 1.4 |
+| `ZONE` | `__________` | Step 1.4 |
+| `VERCEL_URL` | `__________` | Step 7.1 |
 
-Fixed values (already true, do not change):
-- GitHub repo: `https://github.com/litlabs-admin/sales-geeks-expo.git`
-- Branch: `main`
-
-> Whenever a command shows `<PROJECT_ID>`, `<VM_NAME>`, `<ZONE>`, `<VM_IP>` — type your real value from the sheet, **without** the angle brackets.
+> Where a command shows `<VM-NAME>` or `<ZONE>`, type your real value (no angle brackets).
 
 ---
 
-# PHASE 0 — Code is on GitHub `main` (already done — just verify)
-
-All the code + deployment files are already on the `main` branch.
+# PHASE 0 — Code is on GitHub `main` (already done — verify)
 
 ### Step 0.1 — Verify
-Open in a browser: `https://github.com/litlabs-admin/sales-geeks-expo/tree/main`
+Open: `https://github.com/litlabs-admin/sales-geeks-expo/tree/main`
 
-✓ CHECK: you can see the `infra` folder, `apps/backend/Dockerfile`, and `Docs/deployment-steps.md` on the **main** branch.
+✓ CHECK: you see the `infra` folder, `apps/backend/Dockerfile`, and `Docs/deployment-steps.md` on the **main** branch.
 
-> Future code changes (only later, when you edit code). Never `git add .` (it sweeps junk). In the VSCode terminal:
+> Future code changes only (never `git add .` — it sweeps junk):
 > ```powershell
 > cd c:\Users\ARBAZ\litlabs\sales-geeks-expo
 > git checkout main
-> git add <only the files you changed>
-> git commit -m "describe the change"
+> git add <only files you changed>
+> git commit -m "describe change"
 > git push origin main
 > ```
 
 ---
 
-# PHASE 1 — Install tools & connect Google Cloud (PC terminal)
+# PHASE 1 — Connect to Google Cloud & find the VM (PC terminal)
 
 ### Step 1.1 — Install the Google Cloud CLI
-Download and run: `https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe`
-Click through with default options.
+Download & run: `https://dl.google.com/dl/cloudsdk/channels/rapid/GoogleCloudSDKInstaller.exe` (default options).
 
-✓ CHECK: **close VSCode, reopen it, open a new terminal** (`Ctrl + ~`), then:
-```powershell
-gcloud --version
-```
-You see version numbers (not "not recognized"). If "not recognized", restart your PC and retry.
+✓ CHECK: **close VSCode, reopen, new terminal** (`Ctrl + ~`), then `gcloud --version` prints versions (not "not recognized"). If not recognized, restart the PC.
 
 ### Step 1.2 — Log in
 ```powershell
 gcloud auth login
 ```
-A browser opens → pick your Google account → Allow.
+Browser opens → pick the Google account with access to project `tarsha-ai-491715` → Allow.
 
 ✓ CHECK: terminal says `You are now logged in as [your-email]`.
 
-### Step 1.3 — Create (or pick) the NEW project
-If you will **create** a brand-new project (recommended for a clean start) — pick a globally-unique id (lowercase, digits, dashes), e.g. `sgexpo-prod-2026`:
+### Step 1.3 — Select the project
 ```powershell
-gcloud projects create sgexpo-prod-2026
+gcloud config set project tarsha-ai-491715
 ```
-(If that id is taken, choose another and try again.) If you already made a new project in the web console, skip the create command.
+✓ CHECK: `gcloud config get-value project` prints `tarsha-ai-491715`.
 
-✓ CHECK:
-```powershell
-gcloud projects list
-```
-shows your new project. **Write its PROJECT_ID into your Step 0 sheet.**
-
-### Step 1.4 — Select the project
-```powershell
-gcloud config set project <PROJECT_ID>
-```
-✓ CHECK: `gcloud config get-value project` prints your `<PROJECT_ID>`.
-
-### Step 1.5 — Enable billing (required, or the VM cannot be created)
-In a browser open: `https://console.cloud.google.com/billing` → select your new project → link a billing account (the same one your old project used is fine).
-
-✓ CHECK:
-```powershell
-gcloud beta billing projects describe <PROJECT_ID>
-```
-shows `billingEnabled: true`. (If the `beta` command isn't available, just confirm in the billing web page that the project shows a linked billing account.)
-
-### Step 1.6 — Turn on the Compute service
-```powershell
-gcloud services enable compute.googleapis.com
-```
-This can take 1–2 minutes.
-
-✓ CHECK: command finishes with no error (`Operation finished successfully`).
-
----
-
-# PHASE 2 — Create the new VM + firewall (PC terminal)
-
-### Step 2.1 — Open the firewall for web traffic
-```powershell
-gcloud compute firewall-rules create allow-http-https --direction=INGRESS --action=ALLOW --rules=tcp:80,tcp:443 --source-ranges=0.0.0.0/0 --target-tags=http-server,https-server
-```
-✓ CHECK:
-```powershell
-gcloud compute firewall-rules list
-```
-shows `allow-http-https` with `tcp:80,tcp:443`. (SSH on port 22 is allowed by GCP's built-in `default-allow-ssh` — you do not add that.)
-
-> Do **not** open ports 8081, 8082, 6379. Backend, worker and Redis stay private inside the VM. Leaving them closed is the correct, secure setup.
-
-### Step 2.2 — Create the VM
-```powershell
-gcloud compute instances create sgexpo-vm --zone=europe-west2-a --machine-type=e2-standard-2 --image-family=debian-12 --image-project=debian-cloud --boot-disk-size=30GB --boot-disk-type=pd-ssd --tags=http-server,https-server
-```
-(Takes ~30s. `sgexpo-vm` is your `VM_NAME`; `europe-west2-a` is your `ZONE`.)
-
-✓ CHECK:
+### Step 1.4 — Find the tarsha VM (name + zone)
 ```powershell
 gcloud compute instances list
 ```
-shows `sgexpo-vm` with `STATUS: RUNNING`.
+✓ CHECK: find the row whose `EXTERNAL_IP` is `34.30.155.166`. **Write its `NAME` → `VM_NAME` and `ZONE` → `ZONE`** into the Step 0 sheet.
 
-### Step 2.3 — Confirm the name/zone in your sheet
-From the list above: `VM_NAME = sgexpo-vm`, `ZONE = europe-west2-a`. Put them in the Step 0 sheet.
-
-✓ CHECK: sheet has VM_NAME and ZONE filled.
-
-### Step 2.4 — Get the VM's external IP and build your API address
+### Step 1.5 — Firewall: verify the existing rule (do NOT create a new one)
+The VM already has rule **`tarsha-allow-web`** (`tcp:22,80,443`, anywhere, tag `tarsha-server`) — exactly what we need. Just confirm the VM carries that tag:
 ```powershell
-gcloud compute instances describe sgexpo-vm --zone europe-west2-a --format="value(networkInterfaces[0].accessConfigs[0].natIP)"
+gcloud compute instances describe <VM-NAME> --zone <ZONE> --format="value(tags.items)"
 ```
-It prints an IP like `203.0.113.10`.
+✓ CHECK: output contains `tarsha-server`.
+- If it does → done.
+- If it does NOT → add it: `gcloud compute instances add-tags <VM-NAME> --zone <ZONE> --tags=tarsha-server`, then re-run the describe and confirm.
 
-✓ CHECK: you got an IP. **In the Step 0 sheet:**
-- `VM_IP` = that IP (e.g. `203.0.113.10`)
-- `API_HOST` = `api.` + that IP + `.sslip.io` (keep the dots), e.g. `api.203.0.113.10.sslip.io`
-- Full API URL you will use later: `https://<API_HOST>` (e.g. `https://api.203.0.113.10.sslip.io`)
+> Do **not** open ports 8081/8082/6379 — backend, worker and Redis stay private inside the VM. Leaving them closed is correct and secure.
 
-### Step 2.5 — Connect into the VM (SSH from the VSCode terminal)
+### Step 1.6 — SSH into the VM (from the VSCode terminal)
 ```powershell
-gcloud compute ssh sgexpo-vm --zone europe-west2-a --project <PROJECT_ID>
+gcloud compute ssh <VM-NAME> --zone <ZONE> --project tarsha-ai-491715
 ```
-First time: it generates an SSH key — if it asks for a passphrase press **Enter** twice (empty); if it asks to continue type `y`.
+First time: if asked for a key passphrase press **Enter** twice; if asked to continue type `y`.
 
-✓ CHECK: your prompt changes to something like `yourname@sgexpo-vm:~$`. **You are now inside the VM.** Every **(VM)** step is typed in this window. To leave: `exit`. To return: run this same command again.
-
-> Optional nicer setup: VSCode's **Remote - SSH** extension can open the VM as a workspace. Not required — the `gcloud compute ssh` terminal above is enough for everything in this guide.
+✓ CHECK: prompt changes to `yourname@<VM-NAME>:~$`. **You are now inside the VM.** `exit` leaves it; re-run this command to return.
 
 ---
 
-# PHASE 3 — Set up the VM (one time)
+# PHASE 2 — Inspect the VM before changing anything (VM)
 
-### Step 3.1 — Install Docker (VM)
+### Step 2.1 — See what the other deployment is using
+```bash
+echo "--- listeners on 80/443 ---"; sudo ss -tlnp '( sport = :80 or sport = :443 )'
+echo "--- running containers ---"; docker ps --format 'table {{.Names}}\t{{.Ports}}' 2>/dev/null || echo "docker not installed yet"
+echo "--- disk ---"; df -h / | tail -1
+echo "--- memory ---"; free -m | awk '/Mem:/{print "total "$2"MB, available "$7"MB"}'
+```
+✓ CHECK — record what you see (you will act on it in Step 5):
+- Whether anything is listed on **:80** or **:443**.
+- Free disk on `/` (need **≥ 8 GB free** to build images).
+- Available memory (need **≥ 1.5 GB available**; the stack is capped at backend 1 GB + worker 256 MB + small Redis).
+
+> Do not stop or change the other deployment yet. We only looked.
+
+---
+
+# PHASE 3 — Set up Docker & the code on the VM (VM)
+
+### Step 3.1 — Install Docker (skip if `docker ps` already worked in Step 2.1)
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
 sudo usermod -aG docker $USER
 exit
 ```
-You were dropped back to your PC. Reconnect (Step 2.5 command):
-```powershell
-gcloud compute ssh sgexpo-vm --zone europe-west2-a --project <PROJECT_ID>
-```
-✓ CHECK: (VM)
+You return to your PC. Reconnect (Step 1.6 command), then:
 ```bash
-docker --version
-docker compose version
-docker ps
+docker --version && docker compose version && docker ps
 ```
-All print, and `docker ps` does **not** say "permission denied".
+✓ CHECK: all print; `docker ps` is **not** "permission denied".
 
-### Step 3.2 — Make a GitHub access token (the repo is private)
-Browser → GitHub → your avatar → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**.
-- Note: `sgexpo-vm`, Expiration: 30 days, tick **`repo`**, Generate, **copy the token** (`ghp_...`).
+### Step 3.2 — GitHub access token (private repo)
+Browser → GitHub → avatar → **Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token (classic)**: Note `sgexpo-vm`, Expiration 30 days, tick **`repo`**, Generate, **copy** the `ghp_...` token.
 
 ✓ CHECK: token saved temporarily.
 
-### Step 3.3 — Download the code (VM) — replace `YOUR_TOKEN`
+### Step 3.3 — Get the code into `/opt/sgexpo` (VM) — replace `YOUR_TOKEN`
 ```bash
-cd /opt
-sudo mkdir -p sgexpo
-sudo chown -R $USER:$USER sgexpo
-git clone https://YOUR_TOKEN@github.com/litlabs-admin/sales-geeks-expo.git sgexpo
-cd sgexpo
-git checkout main
+sudo mkdir -p /opt/sgexpo && sudo chown -R $USER:$USER /opt/sgexpo
+if [ -d /opt/sgexpo/.git ]; then
+  cd /opt/sgexpo && git fetch origin && git checkout main && git pull
+else
+  rmdir /opt/sgexpo 2>/dev/null
+  git clone https://YOUR_TOKEN@github.com/litlabs-admin/sales-geeks-expo.git /opt/sgexpo
+  cd /opt/sgexpo && git checkout main
+fi
 ```
-✓ CHECK:
-```bash
-ls infra/docker/docker-compose.prod.yml apps/backend/Dockerfile
-```
-both paths print, no "No such file".
-
-### Step 3.4 — Put your VM IP into the Caddy config (VM)
-```bash
-nano infra/caddy/Caddyfile
-```
-Find the line `api.REPLACE_WITH_VM_IP.sslip.io {` and replace `REPLACE_WITH_VM_IP` with your real `VM_IP` (the raw IP with dots). Example result: `api.203.0.113.10.sslip.io {`
-Save: **Ctrl+O**, **Enter**, **Ctrl+X**.
+(This safely handles a fresh VM **and** a half-finished earlier attempt.)
 
 ✓ CHECK:
 ```bash
-grep sslip infra/caddy/Caddyfile
+ls /opt/sgexpo/infra/docker/docker-compose.prod.yml /opt/sgexpo/apps/backend/Dockerfile
+grep -m1 '^name:' /opt/sgexpo/infra/docker/docker-compose.prod.yml
 ```
-shows your line as `api.<your real IP>.sslip.io {` — **no** word `REPLACE_WITH_VM_IP` remaining.
+both paths print, and the grep shows `name: sgexpo` (this is the namespace that keeps us isolated from the other deployment).
+
+### Step 3.4 — Confirm the Caddy hostname (no edit needed)
+```bash
+grep sslip /opt/sgexpo/infra/caddy/Caddyfile
+```
+✓ CHECK: shows `api.34-30-155-166.sslip.io {`. (Already correct for this VM — nothing to change.)
 
 ---
 
 # PHASE 4 — Supabase (browser)
 
-### Step 4.1 — Create the database project
+### Step 4.1 — Create the project
 `https://supabase.com/dashboard` → **New project** → name `salesgeek-prod` → region **West EU (London)** → set & save a strong DB password.
 
-✓ CHECK: project shows "Active/Healthy" after a minute.
+✓ CHECK: project shows "Active/Healthy".
 
-### Step 4.2 — Create the tables (run migrations in order)
-Supabase → **SQL Editor** → **New query**. On your PC the files are in `supabase/sql/`. Open each, copy all text, paste, **Run**, in this exact order:
+### Step 4.2 — Run migrations in order
+Supabase → **SQL Editor** → **New query**. Files are in `supabase/sql/` (in your local repo). Open each, copy all, paste, **Run**, in this exact order:
 ```
 0000_extensions.sql
 0001_phase0_foundation.sql
@@ -241,43 +188,55 @@ Supabase → **SQL Editor** → **New query**. On your PC the files are in `supa
 0009_phase8_exports_archive.sql
 0010_production_readiness.sql
 ```
-✓ CHECK: each says "Success". After `0010`, run `select count(*) from events;` — returns a number, not an error.
+✓ CHECK: each says "Success". After `0010`: `select count(*) from events;` returns a number.
 
-### Step 4.3 — Copy the connection values
+### Step 4.3 — Copy connection values
 Supabase → **Project Settings**:
-- **Database** → Connection string → **Transaction** mode, port `5432` → that is `DATABASE_URL`
+- **Database** → Connection string → **Transaction** mode, port `5432` → `DATABASE_URL`
 - **API** → **Project URL**, **anon public** key, **service_role** key
 - **API → JWT Settings** → **JWT Secret**
 
-✓ CHECK: 5 values saved (Project URL, anon key, service_role key, JWT secret, DATABASE_URL).
+✓ CHECK: 5 values saved.
 
-### Step 4.4 — Allow login redirects
+### Step 4.4 — Auth redirect placeholders
 Supabase → **Authentication → URL Configuration**:
-- **Site URL:** put a placeholder for now: `https://placeholder.vercel.app`
+- **Site URL:** `https://placeholder.vercel.app`
 - **Redirect URLs:** add `https://placeholder.vercel.app/**`
-- Save. (You will correct these in Step 7.4 once you know the real Vercel URL.)
+- Save (corrected in Step 7.4).
 
-✓ CHECK: both fields saved.
+✓ CHECK: both saved.
 
 ---
 
-# PHASE 5 — Create the secret files on the VM
+# PHASE 5 — Resolve the port conflict, then create secrets (VM)
 
-### Step 5.1 — Generate the two app secrets (VM)
+### Step 5.1 — 🚦 GATE: ports 80 and 443 must be free
+Re-check (from Step 2.1):
+```bash
+sudo ss -tlnp '( sport = :80 or sport = :443 )'
+```
+**Decide based on the output:**
+- **No rows (header only)** → ✅ clear. Continue to Step 5.2.
+- **Something is listening on :80 or :443** → ❌ conflict. You must resolve it before continuing. Identify it from `docker ps` (Step 2.1) or the `ss` output, then pick **one**:
+  1. **The other app is not needed** → stop it. Docker: `docker stop <name>` (and `docker update --restart=no <name>` so it stays down). System service: `sudo systemctl stop <name> && sudo systemctl disable <name>`.
+  2. **The other app must keep running** → you cannot serve both on 80/443 from one VM without a shared reverse-proxy. **Stop here and ask for help** with your exact `ss`/`docker ps` output — do not force past this.
+
+✓ CHECK: re-run the `ss` command → **nothing on :80 or :443**. Only then continue.
+
+### Step 5.2 — Generate the two app secrets (VM)
 ```bash
 openssl rand -hex 32
 openssl rand -hex 32
 ```
-Save both 64-char strings as `QR_SIGNING_SECRET` and `CALENDLY_WEBHOOK_SECRET`.
+Save as `QR_SIGNING_SECRET` and `CALENDLY_WEBHOOK_SECRET`.
 
-✓ CHECK: two different strings saved. **Never change `QR_SIGNING_SECRET` later** or printed QR codes stop working.
+✓ CHECK: two different 64-char strings saved. **Never change `QR_SIGNING_SECRET` later.**
 
-### Step 5.2 — Backend secrets file (VM)
+### Step 5.3 — Backend secrets file (VM)
 ```bash
 cd /opt/sgexpo/infra/docker
 nano .env.backend
 ```
-Fill every `<...>`:
 ```
 NODE_ENV=production
 NEXT_PUBLIC_SUPABASE_URL=https://<your-supabase-ref>.supabase.co
@@ -286,16 +245,16 @@ SUPABASE_JWT_SECRET=<JWT secret from 4.3>
 SUPABASE_SERVICE_ROLE_KEY=<service_role key from 4.3>
 REDIS_URL=redis://redis:6379
 CORS_ALLOWED_ORIGINS=https://placeholder.vercel.app
-QR_SIGNING_SECRET=<first string from 5.1>
-CALENDLY_WEBHOOK_SECRET=<second string from 5.1>
+QR_SIGNING_SECRET=<first string from 5.2>
+CALENDLY_WEBHOOK_SECRET=<second string from 5.2>
 RESEND_API_KEY=re_<your resend api key>
 RESEND_FROM_EMAIL=onboarding@resend.dev
 ```
 Save: **Ctrl+O**, **Enter**, **Ctrl+X**.
 
-✓ CHECK: `cat .env.backend` shows all lines filled, no `<...>` left.
+✓ CHECK: `cat .env.backend` — every `<...>` filled.
 
-### Step 5.3 — Worker secrets file (VM)
+### Step 5.4 — Worker secrets file (VM)
 ```bash
 nano .env.worker
 ```
@@ -310,28 +269,24 @@ Save.
 
 ✓ CHECK: `cat .env.worker` shows 5 filled lines.
 
-> `onboarding@resend.dev` only delivers to the email that owns your Resend account — perfect for testing (use that email as your test user). For the real event you need a domain + verified Resend sender.
+> `onboarding@resend.dev` only emails the address that owns your Resend account — fine for testing (use that email as your test user); for the real event you need a domain + verified Resend sender.
 
 ---
 
-# PHASE 6 — Build & start the backend on the VM
+# PHASE 6 — Build & start (VM)
 
-### Step 6.1 — Quick sanity: ports 80/443 are free (new VM, should be clear)
-```bash
-sudo ss -tlnp '( sport = :80 or sport = :443 )'
-```
-✓ CHECK: only a header line, no entries (a brand-new VM has nothing on 80/443). If something IS listed, stop and investigate before continuing.
+All commands from `/opt/sgexpo/infra/docker`. The stack is named `sgexpo`, so its containers (`sgexpo-backend-1`, …), networks and volumes are isolated from the other deployment.
 
-### Step 6.2 — Build the images (VM)
+### Step 6.1 — Build
 ```bash
 cd /opt/sgexpo/infra/docker
 docker compose -f docker-compose.prod.yml build
 ```
-Takes a few minutes the first time (it compiles the app) — normal.
+First build takes a few minutes (compiling the app) — normal.
 
-✓ CHECK: ends with no red `ERROR`. `docker images` shows `sgexpo/backend` and `sgexpo/worker`.
+✓ CHECK: ends with no red `ERROR`; `docker images` shows `sgexpo/backend` and `sgexpo/worker`.
 
-### Step 6.3 — Start everything (VM)
+### Step 6.2 — Start
 ```bash
 docker compose -f docker-compose.prod.yml up -d
 ```
@@ -339,100 +294,91 @@ docker compose -f docker-compose.prod.yml up -d
 ```bash
 docker compose -f docker-compose.prod.yml ps
 ```
-4 services `redis`, `backend`, `worker`, `caddy` all `Up`; within ~40s `redis` and `backend` show `(healthy)` (re-run until they do).
+4 services `redis backend worker caddy` all `Up`; within ~40s `redis` and `backend` show `(healthy)` (re-run until they do). The other deployment's containers are still `Up` and untouched.
 
-### Step 6.4 — Backend health, internal (VM)
+### Step 6.3 — Backend health (internal)
 ```bash
 docker compose -f docker-compose.prod.yml exec backend wget -qO- http://localhost:8081/health
 ```
-✓ CHECK: `{"ok":true,"service":"backend","db_reachable":true}`. If `db_reachable:false`, fix `DATABASE_URL` in `.env.backend` (Step 5.2), then `docker compose -f docker-compose.prod.yml up -d` again.
+✓ CHECK: `{"ok":true,"service":"backend","db_reachable":true}`. If `db_reachable:false` → fix `DATABASE_URL` in `.env.backend` (5.3), then `docker compose -f docker-compose.prod.yml up -d` again.
 
-### Step 6.5 — Public HTTPS health (any browser)
-Open: `https://<API_HOST>/health` (e.g. `https://api.203.0.113.10.sslip.io/health`)
+### Step 6.4 — Public HTTPS health (any browser)
+Open: `https://api.34-30-155-166.sslip.io/health`
 
-✓ CHECK: same JSON appears. If you get a certificate error, wait 60s (first-time cert) and refresh. Still failing after 2 min? (VM) `docker compose -f docker-compose.prod.yml logs caddy`, and double-check Step 3.4 (the Caddyfile must have your real IP, not REPLACE_WITH_VM_IP) and the firewall (Step 2.1). After editing the Caddyfile run `docker compose -f docker-compose.prod.yml restart caddy`.
+✓ CHECK: same JSON. Certificate error? Wait 60s (first-time cert) and refresh. Still failing after 2 min? (VM) `docker compose -f docker-compose.prod.yml logs caddy` — common causes: the firewall tag (Step 1.5), or something *else* grabbed 80/443 after Step 5.1 (re-check `sudo ss -tlnp '( sport = :80 or sport = :443 )'`).
 
 ---
 
-# PHASE 7 — Deploy the frontend on Vercel (browser, via GitHub)
+# PHASE 7 — Frontend on Vercel (browser, via GitHub)
 
-### Step 7.1 — Import the repo
-`https://vercel.com` → sign in **with GitHub** → **Add New… → Project** → find `sales-geeks-expo` → **Import** (grant access to `litlabs-admin` if asked).
+### Step 7.1 — Import
+`https://vercel.com` → sign in **with GitHub** → **Add New… → Project** → `sales-geeks-expo` → **Import** (grant `litlabs-admin` access if asked).
 
-✓ CHECK: you are on the "Configure Project" screen.
+✓ CHECK: on the "Configure Project" screen.
 
-### Step 7.2 — Configure (monorepo — important)
+### Step 7.2 — Configure (monorepo)
 - **Root Directory:** Edit → `apps/web`
-- **Production Branch** (Settings → Git if not shown now): `main`
-- Expand **Build and Output Settings** → override:
+- **Production Branch:** `main` (Settings → Git if not shown now)
+- **Build and Output Settings** → override:
   - **Install Command:** `cd ../.. && pnpm install --frozen-lockfile`
   - **Build Command:** `cd ../.. && pnpm --filter web build`
 
 ✓ CHECK: Root Directory `apps/web`; both commands set.
 
 ### Step 7.3 — Environment variables (Production)
-Add each (use your `<API_HOST>`, e.g. `https://api.203.0.113.10.sslip.io`):
 ```
 NEXT_PUBLIC_SUPABASE_URL      = https://<your-supabase-ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY = <anon key from 4.3>
-NEXT_PUBLIC_BACKEND_URL       = https://<API_HOST>
-BACKEND_URL                   = https://<API_HOST>
+NEXT_PUBLIC_BACKEND_URL       = https://api.34-30-155-166.sslip.io
+BACKEND_URL                   = https://api.34-30-155-166.sslip.io
 SUPABASE_SERVICE_ROLE_KEY     = <service_role key from 4.3>
 RESEND_API_KEY                = re_<your resend api key>
 EMAIL_FROM                    = onboarding@resend.dev
 ```
 Click **Deploy**.
 
-✓ CHECK: after a few minutes status is **Ready** and you get a URL like `https://xxxx.vercel.app`. **Write it into the Step 0 sheet as `VERCEL_URL`.**
+✓ CHECK: status **Ready**, you get `https://xxxx.vercel.app`. **Write it as `VERCEL_URL`.**
 
-### Step 7.4 — Make all the addresses match
-- Supabase → Authentication → URL Configuration → set **Site URL** = your `VERCEL_URL`, and **Redirect URLs** add `<VERCEL_URL>/**` (replace the `placeholder` ones).
+### Step 7.4 — Make addresses match
+- Supabase → Authentication → URL Configuration → **Site URL** = `VERCEL_URL`; **Redirect URLs** add `<VERCEL_URL>/**` (remove the placeholder ones).
 - (VM):
   ```bash
   cd /opt/sgexpo/infra/docker
-  nano .env.backend     # set CORS_ALLOWED_ORIGINS=<VERCEL_URL>
+  nano .env.backend     # CORS_ALLOWED_ORIGINS=<VERCEL_URL>
   docker compose -f docker-compose.prod.yml restart backend
   ```
-
-✓ CHECK: `VERCEL_URL` is identical in three places: the Vercel address bar, Supabase Site URL, and `CORS_ALLOWED_ORIGINS` in `.env.backend`.
+✓ CHECK: `VERCEL_URL` is identical in the Vercel address bar, Supabase Site URL, and `CORS_ALLOWED_ORIGINS`.
 
 ---
 
 # PHASE 8 — Final test (phone on mobile data)
 
-Open `VERCEL_URL` on your phone with Wi-Fi off.
+Open `VERCEL_URL` on a phone with Wi-Fi off.
 
-- [ ] Event landing page loads.
-- [ ] Join with the email that owns your **Resend** account → login email arrives ~30s → tapping it logs you in.
+- [ ] Landing page loads.
+- [ ] Join with the email that owns your Resend account → login email ~30s → tap → logged in.
 - [ ] Home shows score `0` and a rank.
-- [ ] "My QR" shows. On a second phone (different test user) scan it → points awarded.
+- [ ] "My QR" shows; a second phone (different user) scans it → points awarded.
 - [ ] Scan the **same** QR again → **no extra points** (anti-cheat works).
 - [ ] Admin login → Ops dashboard shows live numbers.
-- [ ] (VM) `docker compose -f docker-compose.prod.yml logs worker | tail -20` → background poll running, no repeating errors.
+- [ ] (VM) `docker compose -f docker-compose.prod.yml logs worker | tail -20` → poll running, no repeating errors.
+- [ ] The other deployment still works (open its URL) — confirms no collision.
 
-✓ CHECK: every box ticked → **you are deployed.**
+✓ CHECK: every box ticked → **deployed, with both apps coexisting.**
 
 ---
 
 # Updating later
 
-**Frontend:** just push code to `main` — Vercel auto-rebuilds.
-```powershell
-cd c:\Users\ARBAZ\litlabs\sales-geeks-expo
-git checkout main
-git add <changed files>
-git commit -m "describe the change"
-git push origin main
-```
-**Backend/worker:** (PC) `gcloud compute ssh sgexpo-vm --zone europe-west2-a --project <PROJECT_ID>`, then (VM):
+**Frontend:** push to `main` → Vercel auto-rebuilds.
+**Backend/worker:** SSH in (Step 1.6), then:
 ```bash
-cd /opt/sgexpo
-git pull
+cd /opt/sgexpo && git pull
 cd infra/docker
 docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml up -d
 ```
-✓ CHECK: `https://<API_HOST>/health` still returns healthy JSON.
+✓ CHECK: `https://api.34-30-155-166.sslip.io/health` still healthy; other deployment unaffected.
 
 ---
 
@@ -444,10 +390,12 @@ docker compose -f docker-compose.prod.yml ps
 docker compose -f docker-compose.prod.yml logs backend | tail -50
 docker compose -f docker-compose.prod.yml logs caddy   | tail -50
 docker compose -f docker-compose.prod.yml restart backend
-docker compose -f docker-compose.prod.yml up -d         # re-apply after editing a .env
+docker compose -f docker-compose.prod.yml up -d        # re-apply after editing a .env
 ```
+- Caddy won't start / "address already in use" → the port conflict (Step 5.1) — something else holds 80/443.
 - `db_reachable:false` → wrong `DATABASE_URL` in `.env.backend`.
-- Certificate error → Caddyfile still has `REPLACE_WITH_VM_IP` (Step 3.4), or firewall (Step 2.1); wait 1–2 min after fixing, then `restart caddy`.
+- Cert error → wait 1–2 min; check firewall tag (Step 1.5) and `logs caddy`.
 - Frontend loads but actions fail → `VERCEL_URL` not in `CORS_ALLOWED_ORIGINS` (Step 7.4).
+- Need to fully remove this stack without touching the other app: `docker compose -f docker-compose.prod.yml down` (only removes `sgexpo-*` objects).
 
-Full reasoning for every component is in [deployment.md](deployment.md) (note: that reference doc still shows example values from an earlier VM — for the live procedure use *this* file and your Step 0 sheet).
+Full reasoning for every component is in [deployment.md](deployment.md).

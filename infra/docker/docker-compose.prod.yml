@@ -1,7 +1,12 @@
 # Production stack — run from infra/docker/ so the Caddyfile bind path resolves.
-#   export REGISTRY=europe-west2-docker.pkg.dev/tarsha-ai-491715/apps TAG=prod
-#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml build
 #   docker compose -f docker-compose.prod.yml up -d
+#
+# This VM may run OTHER deployments. The fixed project name below namespaces
+# every container/network/volume as "sgexpo-*" / "sgexpo_*" so nothing here
+# can collide with another stack's Docker objects. (Host ports 80/443 are
+# still shared at the OS level — see the port pre-flight in deployment-steps.)
+name: sgexpo
 
 # Bounded logging — without this, json-file logs grow unbounded and can
 # fill the VM disk during an all-day event, taking every container down.

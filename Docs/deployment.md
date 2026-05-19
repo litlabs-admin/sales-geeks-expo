@@ -5,7 +5,7 @@
 
 Every step below has the exact command **and** an explanation of *what it does* and *why it exists*. Read the "Why" boxes — they are the difference between copy-pasting and understanding what you are running on event day.
 
-> **⚠️ Values in this document are EXAMPLES from an earlier VM** (project `tarsha-ai-491715`, IP `34.30.155.166`, host `api.34-30-155-166.sslip.io`). The live deployment uses a **new GCP project and a new VM** — substitute your own `PROJECT_ID`, VM IP, and `api.<your-vm-ip>.sslip.io` everywhere. The authoritative, current procedure is **[deployment-steps.md](deployment-steps.md)**; this file is the "why it works" reference.
+> **Target: the existing `tarsha` VM** — project `tarsha-ai-491715`, external IP `34.30.155.166`, API host `api.34-30-155-166.sslip.io`. These values are real and used as-is. This VM **already runs another deployment**, so the one thing that can break the install is a **port 80/443 conflict** — the steps gate on a pre-flight check for it. The authoritative click-by-click procedure is **[deployment-steps.md](deployment-steps.md)**; this file is the "why it works" reference.
 
 > **First time deploying? Use [deployment-steps.md](deployment-steps.md) instead.** That guide is a beginner-safe checklist that uses the simplest path: push to GitHub → `git clone` on the VM → build the images **on the VM** (`docker compose build`) — no Docker on your laptop and no Artifact Registry needed. *This* document is the in-depth reference and also covers the alternative "build on laptop, push to Artifact Registry" workflow (Parts 4–5). The `docker-compose.prod.yml` supports **both**: it has a `build:` section (used on the VM) and an `image:` name (used by the registry flow). Pick one path; don't mix.
 
