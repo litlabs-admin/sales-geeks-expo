@@ -8,8 +8,8 @@ You will deploy:
 
 All commands run in the **VSCode integrated terminal** (Terminal → New Terminal, or `Ctrl + ~`; make sure it says **PowerShell**). Steps marked **(PC terminal)** run on your computer; **(VM)** steps run after you SSH into the server (same window, now connected to the VM).
 
-> ### ⚠️ The one thing that can break this: a port 80/443 conflict
-> The tarsha VM already runs another deployment. A firewall rule controls *network* access, but **two programs cannot listen on the same port**. If the existing app uses host port 80 or 443, the new web server (Caddy) will refuse to start. **Step 5 is a hard gate that checks this before anything is built.** Everything else here is conflict-proofed (the Docker stack is fully namespaced `sgexpo-*`, so containers/networks/volumes can never clash with the other app).
+> ### How this coexists with the existing tarsha app (no conflict by design)
+> The tarsha VM already runs another deployment whose **Caddy** (`tarsha-caddy-1`) owns ports 80/443 and already does Let's Encrypt. SalesGeek therefore **does not run its own Caddy** — we start only `redis + backend + worker` (so nothing competes for 80/443) and add **one extra site block** to the existing Caddy for `api.34-30-155-166.sslip.io` (Step 6.4). It's additive, applied with a graceful reload (no downtime for tarsha), and fully reversible. The SalesGeek Docker stack is also namespaced `sgexpo-*`, so containers/networks/volumes can never clash with `tarsha-*`. Step 2 inspects the VM first; Step 5.1 still sanity-checks ports before we touch anything.
 
 ---
 
@@ -208,20 +208,19 @@ Supabase → **Authentication → URL Configuration**:
 
 ---
 
-# PHASE 5 — Resolve the port conflict, then create secrets (VM)
+# PHASE 5 — Confirm the proxy situation, then create secrets (VM)
 
-### Step 5.1 — 🚦 GATE: ports 80 and 443 must be free
-Re-check (from Step 2.1):
+### Step 5.1 — 🚦 Identify what owns 80/443 (it should be the tarsha Caddy)
 ```bash
 sudo ss -tlnp '( sport = :80 or sport = :443 )'
+sudo docker ps --format 'table {{.Names}}\t{{.Image}}\t{{.Ports}}'
 ```
 **Decide based on the output:**
-- **No rows (header only)** → ✅ clear. Continue to Step 5.2.
-- **Something is listening on :80 or :443** → ❌ conflict. You must resolve it before continuing. Identify it from `docker ps` (Step 2.1) or the `ss` output, then pick **one**:
-  1. **The other app is not needed** → stop it. Docker: `docker stop <name>` (and `docker update --restart=no <name>` so it stays down). System service: `sudo systemctl stop <name> && sudo systemctl disable <name>`.
-  2. **The other app must keep running** → you cannot serve both on 80/443 from one VM without a shared reverse-proxy. **Stop here and ask for help** with your exact `ss`/`docker ps` output — do not force past this.
+- **`tarsha-caddy-1` (image `caddy:*`) owns 80/443** → ✅ expected and good. This is exactly what we integrate with in Step 6.4. Continue to Step 5.2. **Do NOT stop it.**
+- **Nothing on 80/443** → also fine; Step 6.4 still works (the existing Caddy serves the new site even with no other site live).
+- **Something that is NOT a Caddy/Traefik/Nginx-Proxy-Manager owns 80/443** (e.g. a bare app, or a proxy you can't add a site to) → **stop here and paste the `docker ps` output** — integration differs and forcing past this will fail.
 
-✓ CHECK: re-run the `ss` command → **nothing on :80 or :443**. Only then continue.
+✓ CHECK: you know the name + image of whatever holds 80/443, and it's the tarsha Caddy (or nothing). Then continue.
 
 ### Step 5.2 — Generate the two app secrets (VM)
 ```bash
@@ -286,26 +285,64 @@ First build takes a few minutes (compiling the app) — normal.
 
 ✓ CHECK: ends with no red `ERROR`; `docker images` shows `sgexpo/backend` and `sgexpo/worker`.
 
-### Step 6.2 — Start
+### Step 6.2 — Start WITHOUT Caddy (the existing tarsha Caddy will front us)
+This VM's existing `tarsha-caddy-1` already owns 80/443 and already does Let's Encrypt. We do **not** run a second Caddy. Start only the three SalesGeek services (note the explicit list — no `caddy`):
 ```bash
-docker compose -f docker-compose.prod.yml up -d
+sudo docker compose -f docker-compose.prod.yml up -d redis backend worker
 ```
 ✓ CHECK:
 ```bash
-docker compose -f docker-compose.prod.yml ps
+sudo docker compose -f docker-compose.prod.yml ps
 ```
-4 services `redis backend worker caddy` all `Up`; within ~40s `redis` and `backend` show `(healthy)` (re-run until they do). The other deployment's containers are still `Up` and untouched.
+`redis backend worker` all `Up`; within ~40s `redis` and `backend` show `(healthy)` (re-run until they do). `tarsha-*` containers are still `Up` and untouched.
 
 ### Step 6.3 — Backend health (internal)
 ```bash
-docker compose -f docker-compose.prod.yml exec backend wget -qO- http://localhost:8081/health
+sudo docker compose -f docker-compose.prod.yml exec backend wget -qO- http://localhost:8081/health
 ```
-✓ CHECK: `{"ok":true,"service":"backend","db_reachable":true}`. If `db_reachable:false` → fix `DATABASE_URL` in `.env.backend` (5.3), then `docker compose -f docker-compose.prod.yml up -d` again.
+✓ CHECK: `{"ok":true,"service":"backend","db_reachable":true}`. If `db_reachable:false` → fix `DATABASE_URL` in `.env.backend` (5.3), then re-run the Step 6.2 `up` line.
 
-### Step 6.4 — Public HTTPS health (any browser)
-Open: `https://api.34-30-155-166.sslip.io/health`
+### Step 6.4 — Plug into the existing tarsha Caddy (additive, no downtime)
+**a. Attach the existing Caddy to SalesGeek's network** so it can reach the backend by name:
+```bash
+sudo docker network connect sgexpo_web tarsha-caddy-1
+```
+**b. Back up, then add one site block** to the existing Caddyfile:
+```bash
+sudo cp /opt/tarsha/Caddyfile /opt/tarsha/Caddyfile.bak
+sudo nano /opt/tarsha/Caddyfile
+```
+Keep the existing block, add the new one below so the file reads **exactly**:
+```
+34.30.155.166.nip.io {
+    reverse_proxy api:8000
+}
 
-✓ CHECK: same JSON. Certificate error? Wait 60s (first-time cert) and refresh. Still failing after 2 min? (VM) `docker compose -f docker-compose.prod.yml logs caddy` — common causes: the firewall tag (Step 1.5), or something *else* grabbed 80/443 after Step 5.1 (re-check `sudo ss -tlnp '( sport = :80 or sport = :443 )'`).
+api.34-30-155-166.sslip.io {
+    reverse_proxy sgexpo-backend-1:8081
+}
+```
+Save: **Ctrl+O**, **Enter**, **Ctrl+X**.
+
+**c. Graceful reload** (zero dropped requests for the tarsha app):
+```bash
+sudo docker exec tarsha-caddy-1 caddy reload --config /etc/caddy/Caddyfile
+```
+If that errors with an adapter message, run instead:
+```bash
+sudo docker exec tarsha-caddy-1 caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+✓ CHECK: command returns with no error; `sudo docker ps` still shows `tarsha-caddy-1` and all `tarsha-*` Up.
+
+### Step 6.5 — Verify both apps over HTTPS (any browser)
+```
+https://api.34-30-155-166.sslip.io/health     → SalesGeek health JSON
+https://34.30.155.166.nip.io                  → existing tarsha app still works
+```
+✓ CHECK: first returns `{"ok":true,"service":"backend","db_reachable":true}` (wait up to 60s the first time while Caddy issues the new cert); second is unchanged — proving coexistence. If the first 502s: re-check Step 6.4a (network connect) and that the Caddyfile block names `sgexpo-backend-1:8081` exactly; then `sudo docker exec tarsha-caddy-1 caddy reload --config /etc/caddy/Caddyfile`.
+
+> **Reversal** (if ever needed): `sudo cp /opt/tarsha/Caddyfile.bak /opt/tarsha/Caddyfile`, reload Caddy, `sudo docker network disconnect sgexpo_web tarsha-caddy-1`. Tarsha is back exactly as before.
+> **Durability:** Step 6.4a is runtime-only. If `tarsha-caddy-1` is ever recreated (tarsha redeploy), re-run it.
 
 ---
 
@@ -345,7 +382,7 @@ Click **Deploy**.
   ```bash
   cd /opt/sgexpo/infra/docker
   nano .env.backend     # CORS_ALLOWED_ORIGINS=<VERCEL_URL>
-  docker compose -f docker-compose.prod.yml restart backend
+  sudo docker compose -f docker-compose.prod.yml restart backend
   ```
 ✓ CHECK: `VERCEL_URL` is identical in the Vercel address bar, Supabase Site URL, and `CORS_ALLOWED_ORIGINS`.
 
@@ -361,7 +398,7 @@ Open `VERCEL_URL` on a phone with Wi-Fi off.
 - [ ] "My QR" shows; a second phone (different user) scans it → points awarded.
 - [ ] Scan the **same** QR again → **no extra points** (anti-cheat works).
 - [ ] Admin login → Ops dashboard shows live numbers.
-- [ ] (VM) `docker compose -f docker-compose.prod.yml logs worker | tail -20` → poll running, no repeating errors.
+- [ ] (VM) `sudo docker compose -f docker-compose.prod.yml logs worker | tail -20` → poll running, no repeating errors.
 - [ ] The other deployment still works (open its URL) — confirms no collision.
 
 ✓ CHECK: every box ticked → **deployed, with both apps coexisting.**
@@ -375,10 +412,11 @@ Open `VERCEL_URL` on a phone with Wi-Fi off.
 ```bash
 cd /opt/sgexpo && git pull
 cd infra/docker
-docker compose -f docker-compose.prod.yml build
-docker compose -f docker-compose.prod.yml up -d
+sudo docker compose -f docker-compose.prod.yml build
+sudo docker compose -f docker-compose.prod.yml up -d redis backend worker
 ```
-✓ CHECK: `https://api.34-30-155-166.sslip.io/health` still healthy; other deployment unaffected.
+(No Caddy here — the tarsha Caddy keeps fronting us. If `sgexpo-backend-1` was recreated and the API 502s, re-run Step 6.4a: `sudo docker network connect sgexpo_web tarsha-caddy-1`.)
+✓ CHECK: `https://api.34-30-155-166.sslip.io/health` still healthy; tarsha app unaffected.
 
 ---
 
@@ -386,16 +424,15 @@ docker compose -f docker-compose.prod.yml up -d
 
 (VM) from `/opt/sgexpo/infra/docker`:
 ```bash
-docker compose -f docker-compose.prod.yml ps
-docker compose -f docker-compose.prod.yml logs backend | tail -50
-docker compose -f docker-compose.prod.yml logs caddy   | tail -50
-docker compose -f docker-compose.prod.yml restart backend
-docker compose -f docker-compose.prod.yml up -d        # re-apply after editing a .env
+sudo docker compose -f docker-compose.prod.yml ps
+sudo docker compose -f docker-compose.prod.yml logs backend | tail -50
+sudo docker compose -f docker-compose.prod.yml restart backend
+sudo docker compose -f docker-compose.prod.yml up -d redis backend worker   # re-apply after editing a .env
+sudo docker logs tarsha-caddy-1 | tail -50                                  # cert / proxy issues live HERE
 ```
-- Caddy won't start / "address already in use" → the port conflict (Step 5.1) — something else holds 80/443.
-- `db_reachable:false` → wrong `DATABASE_URL` in `.env.backend`.
-- Cert error → wait 1–2 min; check firewall tag (Step 1.5) and `logs caddy`.
+- API 502 / cert error on `api.34-30-155-166.sslip.io` → check `sudo docker logs tarsha-caddy-1`; confirm Step 6.4a network connect, the Caddyfile block names `sgexpo-backend-1:8081`, and the firewall tag (Step 1.5). Wait 1–2 min for first cert.
+- `db_reachable:false` → wrong `DATABASE_URL` in `.env.backend`; re-run Step 6.2 `up` line.
 - Frontend loads but actions fail → `VERCEL_URL` not in `CORS_ALLOWED_ORIGINS` (Step 7.4).
-- Need to fully remove this stack without touching the other app: `docker compose -f docker-compose.prod.yml down` (only removes `sgexpo-*` objects).
+- Remove this stack without touching tarsha: `sudo docker compose -f docker-compose.prod.yml down` (only `sgexpo-*` objects), then `sudo docker network disconnect sgexpo_web tarsha-caddy-1` and restore `/opt/tarsha/Caddyfile.bak` + reload.
 
 Full reasoning for every component is in [deployment.md](deployment.md).
