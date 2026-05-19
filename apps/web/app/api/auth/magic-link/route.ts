@@ -74,7 +74,11 @@ function serviceSupabase() {
 }
 
 function verifyUrl(request: NextRequest, input: { tokenHash: string; mode: LoginMode; next: string; eventSlug: string | null }) {
-  const url = new URL("/auth/callback", request.url);
+  // Verify in the browser (JS) instead of the server GET route: email
+  // security scanners and link-tracking bots don't execute JavaScript, so
+  // the single-use token survives their pre-fetch and is only consumed by
+  // the real user's click. Prevents "sign-in link expired/already used".
+  const url = new URL("/auth/verify", request.url);
   url.searchParams.set("token_hash", input.tokenHash);
   url.searchParams.set("type", "magiclink");
   url.searchParams.set("mode", input.mode);
