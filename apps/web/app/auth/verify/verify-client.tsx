@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
@@ -35,20 +35,25 @@ export default function VerifyClient() {
   const mode = modeFrom(searchParams.get("mode"));
   const fallback = mode === "admin" ? "/admin/events" : mode === "staff" ? "/staff/qr" : "/";
   const next = useMemo(() => safeNextPath(searchParams.get("next"), fallback), [fallback, searchParams]);
-  const [status, setStatus] = useState("Signing you in...");
+  const tokenHash = searchParams.get("token_hash");
+  const [status, setStatus] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    async function verify() {
-      const tokenHash = searchParams.get("token_hash");
-      const eventSlug = searchParams.get("eventSlug") ?? eventSlugFrom(next);
-      const loginPath =
-        mode === "admin" ? "/admin/login" : mode === "staff" ? "/staff/login" : eventSlug ? `/${eventSlug}/join` : "/login";
+  async function confirmSignIn() {
+    if (busy) return;
+    setBusy(true);
+    setStatus("Signing you in...");
 
-      if (!tokenHash) {
-        router.replace(`${loginPath}?error=invalid_link&next=${encodeURIComponent(next)}`);
-        return;
-      }
+    const eventSlug = searchParams.get("eventSlug") ?? eventSlugFrom(next);
+    const loginPath =
+      mode === "admin" ? "/admin/login" : mode === "staff" ? "/staff/login" : eventSlug ? `/${eventSlug}/join` : "/login";
 
+    if (!tokenHash) {
+      router.replace(`${loginPath}?error=invalid_link&next=${encodeURIComponent(next)}`);
+      return;
+    }
+
+    try {
       const supabase = createBrowserSupabaseClient();
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash: tokenHash,
@@ -56,11 +61,11 @@ export default function VerifyClient() {
       });
 
       if (error || !data.session?.access_token) {
-        // TEMP DIAGNOSTIC: surface the real reason instead of hiding it.
         console.error("[verify] verifyOtp failed", error);
         setStatus(
-          `DIAGNOSTIC — verifyOtp failed: name=${error?.name ?? "none"} | status=${error?.status ?? "n/a"} | code=${(error as { code?: string } | null)?.code ?? "n/a"} | message=${error?.message ?? "no session returned"} | tokenLen=${tokenHash?.length ?? 0}`
+          `Sign-in failed: ${error?.message ?? "no session returned"} (${(error as { code?: string } | null)?.code ?? error?.status ?? "unknown"}). Request a fresh link and tap Confirm promptly.`
         );
+        setBusy(false);
         return;
       }
 
@@ -107,13 +112,33 @@ export default function VerifyClient() {
       setStatus("Signed in. Redirecting...");
       router.replace(next);
       router.refresh();
-    }
-
-    void verify().catch((e) => {
+    } catch (e) {
       console.error("[verify] threw", e);
-      setStatus(`DIAGNOSTIC — exception: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
-    });
-  }, [mode, next, router, searchParams]);
+      setStatus(`Sign-in error: ${e instanceof Error ? e.message : String(e)}`);
+      setBusy(false);
+    }
+  }
 
-  return <p className="mt-4 text-sm text-slate-700">{status}</p>;
+  if (!tokenHash) {
+    return (
+      <p className="mt-4 text-sm text-slate-700">
+        This sign-in link is missing its token. Please request a fresh link.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-6">
+      <p className="text-sm text-slate-700">Tap the button below to finish signing in.</p>
+      <button
+        type="button"
+        onClick={confirmSignIn}
+        disabled={busy}
+        className="mt-4 w-full rounded-lg bg-brand px-4 py-3 text-base font-semibold text-white disabled:opacity-60"
+      >
+        {busy ? "Signing you in..." : "Confirm sign in"}
+      </button>
+      {status ? <p className="mt-4 text-sm text-slate-700">{status}</p> : null}
+    </div>
+  );
 }
