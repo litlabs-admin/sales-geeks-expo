@@ -56,7 +56,11 @@ export default function VerifyClient() {
       });
 
       if (error || !data.session?.access_token) {
-        router.replace(`${loginPath}?error=expired_link&next=${encodeURIComponent(next)}`);
+        // TEMP DIAGNOSTIC: surface the real reason instead of hiding it.
+        console.error("[verify] verifyOtp failed", error);
+        setStatus(
+          `DIAGNOSTIC — verifyOtp failed: name=${error?.name ?? "none"} | status=${error?.status ?? "n/a"} | code=${(error as { code?: string } | null)?.code ?? "n/a"} | message=${error?.message ?? "no session returned"} | tokenLen=${tokenHash?.length ?? 0}`
+        );
         return;
       }
 
@@ -105,8 +109,9 @@ export default function VerifyClient() {
       router.refresh();
     }
 
-    void verify().catch(() => {
-      setStatus("That sign-in link could not be used. Please request a fresh link.");
+    void verify().catch((e) => {
+      console.error("[verify] threw", e);
+      setStatus(`DIAGNOSTIC — exception: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}`);
     });
   }, [mode, next, router, searchParams]);
 
