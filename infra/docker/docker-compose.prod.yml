@@ -1,0 +1,122 @@
+# Production stack — run from infra/docker/ so the Caddyfile bind path resolves.
+#   export REGISTRY=europe-west2-docker.pkg.dev/tarsha-ai-491715/apps TAG=prod
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+
+# Bounded logging — without this, json-file logs grow unbounded and can
+# fill the VM disk during an all-day event, taking every container down.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: always
+    # noeviction: idempotency / rate-limit keys must never be silently
+    # dropped (silent eviction → double-award). Fail loud instead.
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - noeviction
+    volumes:
+      - redis-data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging: *default-logging
+
+  backend:
+    # Default name builds on the VM (no registry needed). For the
+    # registry flow, set REGISTRY=europe-west2-docker.pkg.dev/...
+    image: ${REGISTRY:-sgexpo}/backend:${TAG:-prod}
+    build:
+      context: ../..
+      dockerfile: apps/backend/Dockerfile
+    restart: always
+    init: true                 # tini as PID 1: reaps zombies, forwards SIGTERM
+    stop_grace_period: 30s     # let in-flight scans/redemptions finish on redeploy
+    ports:
+      - "8081:8081"
+    env_file: .env.backend
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+      - web
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    logging: *default-logging
+
+  worker:
+    image: ${REGISTRY:-sgexpo}/worker:${TAG:-prod}
+    build:
+      context: ../..
+      dockerfile: apps/worker/Dockerfile
+    restart: always
+    init: true
+    stop_grace_period: 30s
+    env_file: .env.worker
+    environment:
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    logging: *default-logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ../../infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - web
+    logging: *default-logging
+
+networks:
+  internal:
+    driver: bridge
+  web:
+    driver: bridge
+
+volumes:
+  redis-data:
+  caddy-data:
+  caddy-config:

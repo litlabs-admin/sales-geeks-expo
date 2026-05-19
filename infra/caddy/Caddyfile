@@ -1,0 +1,20 @@
+# No-domain deployment: api.34-30-155-166.sslip.io resolves to the VM IP
+# 34.30.155.166 via sslip.io (no DNS setup). Caddy gets a real Let's Encrypt
+# cert for it automatically. Swap this hostname when a real domain is acquired.
+api.34-30-155-166.sslip.io {
+	reverse_proxy backend:8081
+
+	header {
+		# Remove server identification
+		-Server
+		# Security headers
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

@@ -1,0 +1,11 @@
+node_modules
+.next
+.env*
+apps/web
+Docs
+docs
+*.md
+.git
+.turbo
+coverage
+dist
