@@ -8,7 +8,6 @@ export type RoleOption = {
   mode:       RoleMode;
   title:      string;
   description:string;
-  devEmail:   string;
   next:       string;
   eventSlug?: string;
 };
@@ -24,10 +23,6 @@ type CardState = "idle" | "sending" | "sent" | "error";
 const YLW  = "#FFD000";
 const BLK  = "#17191d";
 const DARK = "#1e2028";
-
-function isDevEmail(email: string, devEmail: string) {
-  return email.trim().toLowerCase() === devEmail.trim().toLowerCase();
-}
 
 /* ── Sales Geek glasses mark ── */
 function SGMark({ size = 32 }: { size?: number }) {
@@ -109,8 +104,6 @@ function SecondaryForm({
   onSubmit: (e: FormEvent<HTMLFormElement>) => void;
   onReset: () => void;
 }) {
-  const isDev = isDevEmail(email, option.devEmail);
-
   if (state === "sent") {
     return (
       <div style={{ padding: "14px 16px", background: "#1d1d1d", borderRadius: 8, border: "1px solid #282b3a" }}>
@@ -131,11 +124,6 @@ function SecondaryForm({
 
   return (
     <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {isDev && (
-        <div style={{ fontSize: 10, color: YLW, fontWeight: 700, letterSpacing: "0.06em" }}>
-          ⚡ DEV SHORTCUT ACTIVE
-        </div>
-      )}
       <div style={{ display: "flex", gap: 8 }}>
         <input
           type="email" required autoComplete="email"
@@ -155,7 +143,7 @@ function SecondaryForm({
             borderRadius: 6, cursor: "pointer", whiteSpace: "nowrap",
             opacity: state === "sending" ? 0.6 : 1, fontFamily: "inherit",
           }}>
-          {state === "sending" ? "…" : isDev ? "⚡ Access" : "Sign In →"}
+          {state === "sending" ? "…" : "Sign In →"}
         </button>
       </div>
       {state === "error" && (
@@ -172,7 +160,7 @@ export default function RoleEntryClient({ options }: Props) {
   const joinRef = useRef<HTMLElement>(null);
 
   const [emails, setEmails] = useState<Record<RoleMode, string>>(
-    () => Object.fromEntries(options.map(o => [o.mode, o.devEmail])) as Record<RoleMode, string>
+    () => Object.fromEntries(options.map(o => [o.mode, ""])) as Record<RoleMode, string>
   );
   const [states, setStates] = useState<Record<RoleMode, CardState>>(
     () => Object.fromEntries(options.map(o => [o.mode, "idle"])) as Record<RoleMode, CardState>
@@ -197,13 +185,8 @@ export default function RoleEntryClient({ options }: Props) {
         headers: { "content-type": "application/json" },
         body:    JSON.stringify({ email, mode: option.mode, eventSlug: option.eventSlug, next: option.next }),
       });
-      const payload = await res.json().catch(() => ({})) as { error?: string; dev_verify_url?: string };
+      const payload = await res.json().catch(() => ({})) as { error?: string };
       if (!res.ok) throw new Error(payload.error ?? "Could not start sign in");
-      if (payload.dev_verify_url) {
-        setCard(option.mode, "sending", "Opening dev account…");
-        window.location.assign(payload.dev_verify_url);
-        return;
-      }
       setCard(option.mode, "sent", email);
     } catch (err) {
       setCard(option.mode, "error", err instanceof Error ? err.message : "Sign in failed");
@@ -212,13 +195,10 @@ export default function RoleEntryClient({ options }: Props) {
 
   const attOpt     = options.find(o => o.mode === "attendee")!;
   const bizOpt     = options.find(o => o.mode === "business");
-  const adminOpt   = options.find(o => o.mode === "admin");
-  const staffOpt   = options.find(o => o.mode === "staff");
 
   const attEmail   = emails["attendee"];
   const attState   = states["attendee"];
   const attMsg     = messages["attendee"];
-  const attIsDev   = attOpt ? isDevEmail(attEmail, attOpt.devEmail) : false;
 
   const DISP: React.CSSProperties = {
     fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
@@ -559,17 +539,6 @@ export default function RoleEntryClient({ options }: Props) {
             ) : (
               /* Sign-in form */
               <form onSubmit={e => handleSubmit(e, attOpt)}>
-                {attIsDev && (
-                  <div style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    background: "#1a1200", border: `1px solid ${YLW}30`,
-                    borderRadius: 4, padding: "4px 10px", marginBottom: 12,
-                  }}>
-                    <span style={{ color: YLW, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em" }}>
-                      ⚡ DEV SHORTCUT — auto-redirect without email
-                    </span>
-                  </div>
-                )}
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <input
                     type="email" required autoComplete="email"
@@ -592,18 +561,12 @@ export default function RoleEntryClient({ options }: Props) {
                       opacity: attState === "sending" ? 0.7 : 1,
                       boxShadow: `0 4px 20px ${YLW}40`,
                     }}>
-                    {attState === "sending"
-                      ? "SENDING…"
-                      : attIsDev
-                        ? "⚡ QUICK ACCESS"
-                        : "JOIN APP →"}
+                    {attState === "sending" ? "SENDING…" : "JOIN APP →"}
                   </button>
                 </div>
-                {!attIsDev && (
-                  <p style={{ color: "#b8bace", fontSize: 11, marginTop: 10 }}>
-                    📧 A magic link will be sent to this address
-                  </p>
-                )}
+                <p style={{ color: "#b8bace", fontSize: 11, marginTop: 10 }}>
+                  📧 A magic link will be sent to this address
+                </p>
                 {attState === "error" && (
                   <div style={{
                     marginTop: 12, background: "#fff0f0", border: "1px solid #fca5a5",
@@ -665,37 +628,6 @@ export default function RoleEntryClient({ options }: Props) {
               </p>
             </div>
           )}
-
-          <div style={{ borderTop: "1px solid #282b3a", paddingTop: 28, display: "flex", gap: 16, flexWrap: "wrap" }}>
-            {adminOpt && (
-              <div style={{ flex: "1 1 180px" }}>
-                <p style={{ color: "#8b8fa8", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 10 }}>
-                  ADMIN CONSOLE
-                </p>
-                <SecondaryForm
-                  option={adminOpt}
-                  email={emails["admin"]} state={states["admin"]} message={messages["admin"]}
-                  onEmailChange={v => setEmails(cur => ({ ...cur, admin: v }))}
-                  onSubmit={e => handleSubmit(e, adminOpt)}
-                  onReset={() => setCard("admin", "idle")}
-                />
-              </div>
-            )}
-            {staffOpt && (
-              <div style={{ flex: "1 1 180px" }}>
-                <p style={{ color: "#8b8fa8", fontSize: 11, fontWeight: 700, letterSpacing: "0.06em", marginBottom: 10 }}>
-                  STAFF / QR OPS
-                </p>
-                <SecondaryForm
-                  option={staffOpt}
-                  email={emails["staff"]} state={states["staff"]} message={messages["staff"]}
-                  onEmailChange={v => setEmails(cur => ({ ...cur, staff: v }))}
-                  onSubmit={e => handleSubmit(e, staffOpt)}
-                  onReset={() => setCard("staff", "idle")}
-                />
-              </div>
-            )}
-          </div>
         </div>
       </section>
 

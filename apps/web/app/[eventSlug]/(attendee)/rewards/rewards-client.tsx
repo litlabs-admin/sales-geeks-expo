@@ -293,7 +293,8 @@ export function RewardsClient({ eventId }: { eventId: string }) {
 
     if (rewardsRes.ok) {
       const body = await rewardsRes.json() as { rewards: Reward[] };
-      setRewards(body.rewards ?? []);
+      // Cheapest first, most expensive last (e.g. 1 pt → 100 pt).
+      setRewards([...(body.rewards ?? [])].sort((a, b) => a.cost - b.cost));
     }
     if (attendeeRes.ok) {
       const body = await attendeeRes.json() as { attendee?: { spendable_balance?: number } };
@@ -325,7 +326,7 @@ export function RewardsClient({ eventId }: { eventId: string }) {
         style={{ background: "linear-gradient(160deg, #1e2028 0%, #111 60%)" }}>
         <div className="pointer-events-none absolute inset-0 opacity-[0.05]" aria-hidden
           style={{ backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`, backgroundSize: "40px 40px" }} />
-        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,208,0,0.4)" }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,208,0,0.9)" }}>
           Event App
         </p>
         <h1 style={{
@@ -344,7 +345,7 @@ export function RewardsClient({ eventId }: { eventId: string }) {
               fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
               fontWeight: 800, fontSize: 32, color: YLW, lineHeight: 1,
             }}>{balance}</span>
-            <span style={{ color: "rgba(255,208,0,0.6)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em" }}>
+            <span style={{ color: "rgba(255,208,0,0.9)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em" }}>
               PTS AVAILABLE
             </span>
           </div>

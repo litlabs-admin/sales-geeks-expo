@@ -158,7 +158,7 @@ function LiveCard({ s, expanded, onToggle }: { s: Session; expanded: boolean; on
             <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ background: YLW }} />
             <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: YLW }}>Live now</span>
           </div>
-          <span style={{ color: "rgba(255,208,0,0.5)" }}><IconChevron open={expanded} /></span>
+          <span style={{ color: "rgba(255,208,0,0.92)" }}><IconChevron open={expanded} /></span>
         </div>
 
         <h2 className="text-[17px] font-black leading-snug text-white">{s.title}</h2>
@@ -169,13 +169,13 @@ function LiveCard({ s, expanded, onToggle }: { s: Session; expanded: boolean; on
           </p>
         )}
 
-        <div className="mt-4 flex items-center gap-5" style={{ color: "rgba(255,208,0,0.45)" }}>
+        <div className="mt-4 flex items-center gap-5" style={{ color: "rgba(255,208,0,0.92)" }}>
           <span className="flex items-center gap-1.5">
             <IconStage />
             <span className="text-[11px] font-medium">{s.stage}</span>
           </span>
           <span className="flex items-center gap-1.5">
-            <IconClock color="rgba(255,208,0,0.45)" />
+            <IconClock color="rgba(255,208,0,0.92)" />
             <span className="text-[11px] font-medium">Ends {fmt(s.ends_at)}</span>
           </span>
         </div>
@@ -223,7 +223,7 @@ function UpcomingCard({ s, expanded, onToggle }: { s: Session; expanded: boolean
           {s.description}
         </p>
       )}
-      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "rgba(255,208,0,0.5)" }}>
+      <div className="mt-2 flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: "rgba(255,208,0,0.92)" }}>
         <IconStage />
         <span>{s.stage}</span>
       </div>
@@ -308,7 +308,7 @@ export default function AgendaClient({ sessions }: { sessions: Session[] }) {
         <div className="pointer-events-none absolute -top-16 -right-16 w-64 h-64 rounded-full" aria-hidden
           style={{ background: "radial-gradient(circle, rgba(255,208,0,0.07) 0%, transparent 70%)" }} />
 
-        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,208,0,0.45)" }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,208,0,0.92)" }}>
           26 May 2026 · Hampden
         </p>
         <h1 className="mt-1 font-display text-3xl text-white" style={{ fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif", fontWeight: 800 }}>AGENDA</h1>

@@ -169,19 +169,19 @@ export default function VerifyClient() {
 
   if (phase === "no-token") {
     return (
-      <p className="mt-4 text-sm text-slate-700">
+      <p className="mt-4 text-sm text-slate-300">
         This sign-in link is missing its token. Please request a fresh link.
       </p>
     );
   }
 
   if (phase === "checking") {
-    return <p className="mt-4 text-sm text-slate-700">Checking your session...</p>;
+    return <p className="mt-4 text-sm text-slate-300">Checking your session...</p>;
   }
 
   return (
     <div className="mt-6">
-      <p className="text-sm text-slate-700">Tap the button below to finish signing in.</p>
+      <p className="text-sm text-slate-300">Tap the button below to finish signing in.</p>
       <button
         type="button"
         onClick={confirmSignIn}
@@ -190,7 +190,7 @@ export default function VerifyClient() {
       >
         {busy ? "Signing you in..." : "Confirm sign in"}
       </button>
-      {status ? <p className="mt-4 text-sm text-slate-700">{status}</p> : null}
+      {status ? <p className="mt-4 text-sm text-slate-300">{status}</p> : null}
     </div>
   );
 }
