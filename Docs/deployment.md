@@ -222,20 +222,27 @@ gcloud artifacts docker images list europe-west2-docker.pkg.dev/tarsha-ai-491715
 
 You already have the VM (`34.30.155.166`). These steps install Docker and lay out the deployment directory.
 
-### 6.1 Open the firewall (ports 80 and 443 only)
+### 6.1 Firewall — reuse the existing rule (no new rule needed)
+
+This VM already has a firewall rule **`tarsha-allow-web`**: `INGRESS`, `tcp:22,80,443`, source `0.0.0.0/0`, target tag **`tarsha-server`**. That already covers everything Caddy needs (80 = Let's Encrypt challenge + redirect, 443 = HTTPS). Just confirm the VM carries the `tarsha-server` tag:
 
 ```bash
-gcloud compute firewall-rules create allow-http-https \
-  --direction=INGRESS \
-  --action=ALLOW \
-  --rules=tcp:80,tcp:443 \
-  --source-ranges=0.0.0.0/0 \
-  --target-tags=http-server,https-server
+gcloud compute instances describe <your-vm-name> --zone <your-zone> --format="value(tags.items)"
+# expect to see: tarsha-server
+# if missing:
+gcloud compute instances add-tags <your-vm-name> --zone <your-zone> --tags=tarsha-server
 ```
 
-Then make sure the VM has those network tags (GCP console → VM → Edit → Network tags: add `http-server`, `https-server`, save).
+Only if no such rule existed would you create one:
+```bash
+gcloud compute firewall-rules create allow-http-https \
+  --direction=INGRESS --action=ALLOW --rules=tcp:80,tcp:443 \
+  --source-ranges=0.0.0.0/0 --target-tags=tarsha-server
+```
 
-**Why only 80/443:** Caddy listens on 80 (for the Let's Encrypt HTTP challenge + redirect) and 443 (HTTPS). `backend:8081`, `worker:8082`, `redis:6379` must **never** be reachable from the internet — they live on the private Docker network and are only reached by Caddy and each other. This firewall rule is the second security layer behind Docker's network isolation.
+**Why only 80/443:** Caddy listens on 80 (Let's Encrypt HTTP challenge + redirect) and 443 (HTTPS). `backend:8081`, `worker:8082`, `redis:6379` must **never** be reachable from the internet — they live on the private Docker network and are only reached by Caddy and each other. The existing rules correctly leave those ports closed; do not open them.
+
+> **Shared-VM caution:** this VM already runs another deployment. A firewall rule only controls *network* access — it does not stop two programs fighting over the same port. Before `docker compose up`, confirm nothing else on the VM is already bound to host port 80 or 443 (`sudo ss -tlnp '( sport = :80 or sport = :443 )'` and `docker ps`). If something is, Caddy will fail to start until you stop it or move SalesGeek to its own VM. See deployment-steps.md Step 5.0.
 
 ### 6.2 SSH into the VM and install Docker
 

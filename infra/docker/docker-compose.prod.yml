@@ -98,7 +98,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
+      # No 443/udp (HTTP/3): the VM firewall is TCP-only and HTTP/2 over
+      # TCP is sufficient for this event. Add back + open udp:443 if needed.
     volumes:
       - ../../infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

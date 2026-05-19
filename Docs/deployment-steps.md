@@ -90,21 +90,25 @@ gcloud compute instances list
 
 ✓ CHECK: you see a row whose `EXTERNAL_IP` is `34.30.155.166`. **Write down its NAME and ZONE** (e.g. NAME=`sgexpo-vm`, ZONE=`europe-west2-a`). You will type these in the next steps where it says `<VM-NAME>` and `<ZONE>`.
 
-### Step 1.5 — Open the firewall (allow web traffic to the VM)
+### Step 1.5 — Firewall (you already have a rule — just verify it)
 
-**(on your PC)** — run as one command:
+Your VM already has a firewall rule **`tarsha-allow-web`** that allows inbound `tcp:22, 80, 443` from anywhere, for instances with the network tag **`tarsha-server`**. That is exactly what this deployment needs (80 = Let's Encrypt + redirect, 443 = HTTPS API). **You do not need to create a new rule.** You only need to confirm your VM carries the `tarsha-server` tag.
+
+**(on your PC)** — replace `<VM-NAME>` / `<ZONE>` with what you wrote down in Step 1.4:
 ```powershell
-gcloud compute firewall-rules create allow-http-https --direction=INGRESS --action=ALLOW --rules=tcp:80,tcp:443 --source-ranges=0.0.0.0/0 --target-tags=http-server,https-server
+gcloud compute instances describe <VM-NAME> --zone <ZONE> --format="value(tags.items)"
 ```
-(If it says the rule already exists, that is fine — continue.)
 
-Then in the browser: Google Cloud Console → Compute Engine → VM instances → click your VM → **Edit** → under **Network tags** add `http-server` and `https-server` → **Save**.
+✓ CHECK: the output contains `tarsha-server`.
 
-✓ CHECK:
-```powershell
-gcloud compute firewall-rules list
-```
-shows `allow-http-https` with `tcp:80,tcp:443`.
+- **If it does** → done, skip to Step 1.6. Nothing else to do.
+- **If it does NOT** (the tag is missing) → add it:
+  ```powershell
+  gcloud compute instances add-tags <VM-NAME> --zone <ZONE> --tags=tarsha-server
+  ```
+  Then re-run the describe command and confirm `tarsha-server` now appears.
+
+> Do **not** open ports 8081, 8082, or 6379. The backend, worker, and Redis are only reachable inside the VM's private Docker network — keeping them off the firewall is the correct, secure setup. The existing rules already leave them closed.
 
 ### Step 1.6 — Connect into the VM (SSH)
 
@@ -297,6 +301,24 @@ Supabase → **Authentication** → **URL Configuration**:
 ---
 
 # PHASE 5 — Build and start the backend on the VM
+
+### Step 5.0 — ⚠️ Check ports 80 and 443 are FREE (you have another deployment on this VM)
+
+You already run something else on this VM. **Two programs cannot use the same port.** If your existing app is using port 80 or 443, Caddy will fail to start with an "address already in use" / "port is already allocated" error. Check first.
+
+**(on the VM)**
+```bash
+sudo ss -tlnp '( sport = :80 or sport = :443 )'
+docker ps --format 'table {{.Names}}\t{{.Ports}}'
+```
+
+✓ CHECK — read the output:
+- **Nothing listed on :80 and :443** (the `ss` command prints only a header, no rows) → you are clear. Continue to Step 5.1.
+- **Something IS using :80 or :443** → you have a conflict. Do **not** continue until you resolve it. Pick one:
+  1. **The old thing is no longer needed** → stop it. If it's a Docker container: `docker stop <name>` (from the `docker ps` list). If it's a system service (e.g. nginx/apache): `sudo systemctl stop nginx` (and `sudo systemctl disable nginx` so it doesn't return on reboot).
+  2. **The old thing must keep running** → you cannot host both on the same VM on 80/443 without extra setup. Easiest options: deploy SalesGeek on a **separate VM**, or have one shared reverse-proxy route both domains. This needs a decision — stop here and ask for help with this specific case.
+
+> Why this matters: the SalesGeek `caddy` container binds host ports 80 and 443. The old deployment's firewall rule (`tarsha-allow-web`) and ports are fine to share at the *network* level — the conflict is only about which single program answers on 80/443 on this machine.
 
 ### Step 5.1 — Build the images on the VM
 
