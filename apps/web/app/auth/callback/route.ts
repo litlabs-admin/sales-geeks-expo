@@ -56,6 +56,16 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = createServerSupabaseClient();
+
+  // Already signed in (e.g. re-opened an old/used email link while the
+  // session is still alive) — go straight to the destination via a clean
+  // server redirect. Never flash the "link expired" page to a logged-in
+  // user, and never touch the one-time token.
+  const { data: existingSession } = await supabase.auth.getSession();
+  if (existingSession.session?.access_token) {
+    return redirectTo(request, next);
+  }
+
   const { data, error } = code
     ? await supabase.auth.exchangeCodeForSession(code)
     : await supabase.auth.verifyOtp({
