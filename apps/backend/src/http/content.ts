@@ -2,6 +2,15 @@ import { HTTPException } from "hono/http-exception";
 import type { Context } from "hono";
 import type { Actor } from "@sgexpo/domain/rbac";
 import { sql } from "../db/client";
+import { createRedisClient } from "../redis";
+
+const redis = createRedisClient();
+
+async function ensureRedis() {
+  if (redis.status === "wait" || redis.status === "end") {
+    await redis.connect();
+  }
+}
 
 function requiredString(value: unknown, field: string) {
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -34,6 +43,16 @@ export async function agenda(c: Context) {
     throw new HTTPException(400, { message: "event_id is required" });
   }
 
+  const cacheKey = `agenda:${eventId}`;
+
+  // 5-second cache — short enough that live/ended status stays accurate,
+  // long enough to absorb bursts of 500 attendees all opening the Agenda tab.
+  try {
+    await ensureRedis();
+    const cached = await redis.get(cacheKey);
+    if (cached) return c.json(JSON.parse(cached));
+  } catch { /* non-fatal */ }
+
   const sessions = await sql`
     select
       id,
@@ -57,7 +76,13 @@ export async function agenda(c: Context) {
     order by starts_at asc
   `;
 
-  return c.json({ sessions });
+  const payload = { sessions };
+  try {
+    await ensureRedis();
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", 5);
+  } catch { /* non-fatal */ }
+
+  return c.json(payload);
 }
 
 export async function toggleSponsorInterest(c: Context) {

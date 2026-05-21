@@ -105,6 +105,16 @@ export async function listRewards(c: Context) {
     throw new HTTPException(400, { message: "event_id is required" });
   }
 
+  const cacheKey = `rewards:${eventId}`;
+
+  // 30-second cache — inventory is updated on redemption (invalidated below),
+  // so stale reads are bounded to 30s in the worst case (Redis miss after invalidation).
+  try {
+    await ensureRedis();
+    const cached = await redis.get(cacheKey);
+    if (cached) return c.json(JSON.parse(cached));
+  } catch { /* non-fatal */ }
+
   const rewards = await sql`
     select id, event_id, name, type, cost, inventory, per_attendee_limit, external_provider, redemption_policy
     from public.rewards
@@ -113,7 +123,20 @@ export async function listRewards(c: Context) {
     order by cost asc, name asc
   `;
 
-  return c.json({ rewards });
+  const payload = { rewards };
+  try {
+    await ensureRedis();
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", 30);
+  } catch { /* non-fatal */ }
+
+  return c.json(payload);
+}
+
+async function invalidateRewardsCache(eventId: string) {
+  try {
+    await ensureRedis();
+    await redis.del(`rewards:${eventId}`);
+  } catch { /* non-fatal */ }
 }
 
 export async function redeemReward(input: {
@@ -283,6 +306,7 @@ export async function redeemRewardRoute(c: Context) {
     rewardId,
     requestId
   });
+  void invalidateRewardsCache(eventId);
 
   return c.json({ result }, statusCode(result.status));
 }
@@ -307,6 +331,7 @@ export async function staffRedeemRoute(c: Context) {
     requestId,
     staffId: actor.id
   });
+  void invalidateRewardsCache(eventId);
 
   return c.json({ result }, statusCode(result.status));
 }
