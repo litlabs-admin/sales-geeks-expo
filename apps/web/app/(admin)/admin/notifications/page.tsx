@@ -131,7 +131,7 @@ export default function AdminNotificationsPage() {
           </div>
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Schedule At</label>
-            <input className={inputClass} style={inputStyle} name="scheduled_at" type="datetime-local" />
+            <input className={inputClass} style={{ ...inputStyle, colorScheme: "dark" }} name="scheduled_at" type="datetime-local" />
             <p className="mt-1 text-[10px] text-slate-400">Leave blank to queue immediately.</p>
           </div>
         </div>

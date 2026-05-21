@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { backendGet, fetchContent } from "@/lib/content";
 import HomeProgressClient from "./home-progress-client";
+import HomeNotificationsClient from "./home-notifications-client";
 
 type Announcement = {
   id: string;
@@ -116,6 +117,9 @@ export default async function HomePage() {
 
         {/* ── Progress Widget ── */}
         <HomeProgressClient eventId={eventId} slug={slug} />
+
+        {/* ── Notifications ── */}
+        <HomeNotificationsClient eventId={eventId} />
 
         {/* ── Announcements ── */}
         <div style={{ marginTop: 20 }}>
