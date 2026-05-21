@@ -4,6 +4,22 @@ import type { Actor } from "@sgexpo/domain/rbac";
 import { sql } from "../db/client";
 import { replayPendingScans } from "./scoring";
 import { assertAttendeeArchiveAccess } from "./archive";
+import { createRedisClient } from "../redis";
+
+const redis = createRedisClient();
+
+async function ensureRedis() {
+  if (redis.status === "wait" || redis.status === "end") {
+    await redis.connect();
+  }
+}
+
+export async function invalidateAttendeeMeCache(eventId: string, authUserId: string) {
+  try {
+    await ensureRedis();
+    await redis.del(`attendee:me:${eventId}:${authUserId}`);
+  } catch { /* non-fatal */ }
+}
 
 type AttendeeInput = {
   event_id?: unknown;
@@ -172,6 +188,20 @@ export async function getAttendee(c: Context) {
   }
 
   await assertAttendeeArchiveAccess(eventId, actor.id);
+
+  const cacheKey = `attendee:me:${eventId}:${actor.id}`;
+
+  try {
+    await ensureRedis();
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      const parsed = JSON.parse(cached) as { attendee: { checked_in_at: string | null } | null };
+      if (parsed.attendee?.checked_in_at) {
+        return c.json(parsed);
+      }
+    }
+  } catch { /* non-fatal */ }
+
   await ensureAutoCheckIn(eventId, actor.id);
 
   const rows = await sql`
@@ -182,7 +212,14 @@ export async function getAttendee(c: Context) {
     limit 1
   `;
 
-  return c.json({ attendee: rows[0] ?? null });
+  const payload = { attendee: rows[0] ?? null };
+
+  try {
+    await ensureRedis();
+    await redis.set(cacheKey, JSON.stringify(payload), "EX", 10);
+  } catch { /* non-fatal */ }
+
+  return c.json(payload);
 }
 
 export async function recordPendingScan(c: Context) {
