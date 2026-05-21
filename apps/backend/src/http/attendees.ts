@@ -187,8 +187,6 @@ export async function getAttendee(c: Context) {
     throw new HTTPException(400, { message: "event_id is required" });
   }
 
-  await assertAttendeeArchiveAccess(eventId, actor.id);
-
   const cacheKey = `attendee:me:${eventId}:${actor.id}`;
 
   try {
@@ -202,6 +200,7 @@ export async function getAttendee(c: Context) {
     }
   } catch { /* non-fatal */ }
 
+  await assertAttendeeArchiveAccess(eventId, actor.id);
   await ensureAutoCheckIn(eventId, actor.id);
 
   const rows = await sql`
