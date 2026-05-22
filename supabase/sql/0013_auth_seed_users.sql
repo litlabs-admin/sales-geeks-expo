@@ -1,18 +1,19 @@
 -- ============================================================
 -- 0013_auth_seed_users.sql
--- Seeds the admin auth account + a dummy business for testing.
+-- Seeds the admin auth account + dummy attendee/business identities
+-- for end-to-end testing without email delivery.
 --
 -- After running this:
---   • Admin login (/admin/login):
+--   • Admin login   (/admin/login):
 --       admin+sgexpo@litlabs.io  /  adminsgexpo@123
---   • Attendee dummy: enter `attendee+sgexpo@litlabs.io` on the
---     landing page — Supabase auto-creates the auth user on first
---     sign-in (email-only check-in, no password).
---   • Business dummy: enter `business+sgexpo@litlabs.io` on the
---     landing page — same auto-create flow. The matching row in
---     public.businesses is created below.
+--   • Attendee (root landing page → JOIN APP):
+--       demo@sgexpo.test         (instant access, no password)
+--   • Business  (root landing page → Business section):
+--       demo-business@sgexpo.test (instant access, no password)
 --
--- Idempotent: safe to re-run.
+-- Idempotent: safe to re-run. Also force-resets the older seeded
+-- emails (attendee+sgexpo@..., business+sgexpo@...) back to the
+-- 'attendee' role in case prior testing left them as staff/admin.
 -- ============================================================
 
 DO $$
@@ -66,7 +67,6 @@ BEGIN
       ''
     );
 
-    -- Email identity record (required for password auth in Supabase v2)
     INSERT INTO auth.identities (
       id,
       user_id,
@@ -100,20 +100,38 @@ BEGIN
     WHERE id = admin_user_id;
   END IF;
 
-  -- Promote to admin role in public.users (sync trigger seeded role=attendee)
+  -- Promote to admin role in public.users
   UPDATE public.users
   SET role = 'admin',
       updated_at = now()
   WHERE id = admin_user_id;
 
-  RAISE NOTICE 'Admin auth user ready: % (id %)', admin_email, admin_user_id;
+  RAISE NOTICE 'Admin auth user ready: %', admin_email;
 
   -- ────────────────────────────────────────────────────────
-  -- 2. Dummy business row for business+sgexpo@litlabs.io
-  --    (auth user auto-creates on first sign-in via email-only flow)
+  -- 2. Force-reset any previously-seeded dummy accounts back
+  --    to role='attendee'. Earlier test runs may have promoted
+  --    them, which now causes "Access denied / requires staff"
+  --    on attendee pages.
+  -- ────────────────────────────────────────────────────────
+  UPDATE public.users
+  SET role = 'attendee',
+      updated_at = now()
+  WHERE email IN (
+    'attendee+sgexpo@litlabs.io',
+    'business+sgexpo@litlabs.io',
+    'demo@sgexpo.test',
+    'demo-business@sgexpo.test'
+  )
+    AND role <> 'attendee';
+
+  -- ────────────────────────────────────────────────────────
+  -- 3. Dummy business row for demo-business@sgexpo.test
+  --    (also keep the older business+sgexpo entry alive so it
+  --    still resolves if anyone references it)
   -- ────────────────────────────────────────────────────────
   INSERT INTO public.businesses (event_id, name, contact_email, sponsor_tier)
-  SELECT id, 'Demo Business', 'business+sgexpo@litlabs.io', 'standard'
+  SELECT id, 'Demo Business', 'demo-business@sgexpo.test', 'standard'
   FROM public.events
   WHERE slug = 'sge-2026'
   ON CONFLICT (event_id, name) DO UPDATE
@@ -121,5 +139,6 @@ BEGIN
         archived_at = NULL,
         updated_at = now();
 
-  RAISE NOTICE 'Dummy business row ready for business+sgexpo@litlabs.io';
+  RAISE NOTICE 'Dummy business row ready: demo-business@sgexpo.test';
+  RAISE NOTICE 'Dummy attendee ready: demo@sgexpo.test (auto-creates on first sign-in)';
 END $$;
