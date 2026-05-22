@@ -29,7 +29,7 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState(
     initialError
-      ? "That sign-in link expired or could not be used. Send yourself a fresh link."
+      ? "Sign-in failed. Try again with the email you registered with."
       : "Checking your sign-in status..."
   );
   const [sentTo, setSentTo] = useState("");
@@ -47,7 +47,7 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
         if (!cancelled) {
           setIsCheckingSession(false);
           if (!initialError) {
-            setStatus("Enter your email and we will send a secure sign-in link.");
+            setStatus("Enter the email you registered with to access the event app.");
           }
         }
         return;
@@ -72,7 +72,7 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
       if (!cancelled) {
         setIsCheckingSession(false);
         if (!initialError) {
-          setStatus("Enter your email and we will send a secure sign-in link.");
+          setStatus("Enter the email you registered with to access the event app.");
         }
       }
     });
@@ -116,7 +116,7 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
     }
 
     setSentTo(cleanEmail);
-    setStatus(payload.message ?? "Check your email and open the secure sign-in link.");
+    setStatus(payload.message ?? "Signing you in...");
   }
 
   return (
@@ -136,7 +136,7 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
             value={email}
           />
           <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" type="submit">
-            Send sign-in link
+            Continue
           </button>
         </form>
       ) : null}

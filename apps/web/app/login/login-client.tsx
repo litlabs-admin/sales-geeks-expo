@@ -23,7 +23,7 @@ export default function LoginClient({ mode, defaultNext }: LoginClientProps) {
   const initialError = searchParams.get("error");
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState(
-    initialError ? "That sign-in link expired or could not be used. Send yourself a fresh link." : ""
+    initialError ? "Sign-in failed. Try again with the email you registered with." : ""
   );
   const [sentTo, setSentTo] = useState("");
 
@@ -48,19 +48,19 @@ export default function LoginClient({ mode, defaultNext }: LoginClientProps) {
     };
 
     if (!response.ok) {
-      setStatus(payload.error ?? "Could not send the sign-in link.");
+      setStatus(payload.error ?? "Could not sign you in.");
       setSentTo("");
       return;
     }
 
     if (payload.dev_verify_url) {
-      setStatus(payload.message ?? "Opening seeded test account...");
+      setStatus(payload.message ?? "Signing you in...");
       window.location.assign(payload.dev_verify_url);
       return;
     }
 
     setSentTo(cleanEmail);
-    setStatus(payload.message ?? "Check your email and open the secure sign-in link.");
+    setStatus(payload.message ?? "Signing you in...");
   }
 
   return (
@@ -78,7 +78,7 @@ export default function LoginClient({ mode, defaultNext }: LoginClientProps) {
           value={email}
         />
         <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" type="submit">
-          Send sign-in link
+          Continue
         </button>
       </form>
     </div>

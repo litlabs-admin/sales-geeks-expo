@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import LoginClient from "@/app/login/login-client";
+import AdminLoginClient from "./admin-login-client";
 
 export default function AdminLoginPage() {
   return (
@@ -7,10 +7,10 @@ export default function AdminLoginPage() {
       <p className="text-sm font-medium text-brand">SalesGeek Scotland</p>
       <h1 className="mt-3 text-3xl font-semibold text-ink">Admin sign in</h1>
       <p className="mt-3 text-sm leading-6 text-slate-700">
-        Use an admin operations email. New accounts cannot be created from this screen.
+        Operations email and password. New accounts cannot be created from this screen.
       </p>
       <Suspense fallback={<p className="mt-6 text-sm text-slate-600">Preparing sign-in...</p>}>
-        <LoginClient defaultNext="/admin/events" mode="admin" />
+        <AdminLoginClient />
       </Suspense>
     </main>
   );

@@ -116,7 +116,7 @@ export default function BusinessRegisterPage() {
           </div>
           <h2 className="text-xl font-black text-ink">Registration submitted!</h2>
           <p className="text-slate-500 text-sm mt-2 leading-relaxed">
-            Check your email for a sign-in link. Your business QR will be available once the event admin approves it.
+            Sign in with your business email to view your QR. The event admin must approve it before scans count.
           </p>
           <button
             onClick={() => router.push("/business/login")}

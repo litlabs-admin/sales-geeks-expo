@@ -222,7 +222,10 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (shouldAutoOpenSeededLogin(email)) {
+  // Email-only check-in: attendee + business modes skip email delivery and
+  // auto-redirect to the verify URL. Anyone with a valid email can sign in;
+  // identity will be cross-verified at the door via QR (added later).
+  if (mode === "attendee" || mode === "business" || shouldAutoOpenSeededLogin(email)) {
     return seededLoginOk(link);
   }
 

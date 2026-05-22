@@ -185,8 +185,12 @@ export default function RoleEntryClient({ options }: Props) {
         headers: { "content-type": "application/json" },
         body:    JSON.stringify({ email, mode: option.mode, eventSlug: option.eventSlug, next: option.next }),
       });
-      const payload = await res.json().catch(() => ({})) as { error?: string };
+      const payload = await res.json().catch(() => ({})) as { error?: string; dev_verify_url?: string };
       if (!res.ok) throw new Error(payload.error ?? "Could not start sign in");
+      if (payload.dev_verify_url) {
+        window.location.assign(payload.dev_verify_url);
+        return;
+      }
       setCard(option.mode, "sent", email);
     } catch (err) {
       setCard(option.mode, "error", err instanceof Error ? err.message : "Sign in failed");
@@ -328,7 +332,7 @@ export default function RoleEntryClient({ options }: Props) {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
             </button>
             <p style={{ color: "#787b8f", fontSize: 11, marginTop: 10, textAlign: "center" }}>
-              No password required · Secure magic link sent to your inbox
+              Enter the email you registered with · Instant access, no password
             </p>
           </div>
         </div>
@@ -504,7 +508,7 @@ export default function RoleEntryClient({ options }: Props) {
             JOIN THE EVENT APP
           </h2>
           <p style={{ color: "#9294a8", fontSize: 14, marginBottom: 32, lineHeight: 1.65 }}>
-            Enter the email address you registered with. We'll send you a secure sign-in link — no password needed.
+            Enter the email address you registered with to access the event app instantly. Your identity is cross-verified at the door.
           </p>
 
           {attOpt && (
@@ -565,7 +569,7 @@ export default function RoleEntryClient({ options }: Props) {
                   </button>
                 </div>
                 <p style={{ color: "#b8bace", fontSize: 11, marginTop: 10 }}>
-                  📧 A magic link will be sent to this address
+                  Instant access — your identity is cross-verified at the door
                 </p>
                 {attState === "error" && (
                   <div style={{
@@ -643,7 +647,7 @@ export default function RoleEntryClient({ options }: Props) {
           Scottish Growth Expo 2026 · 26 May · Hampden National Stadium, Glasgow
         </p>
         <p style={{ color: "#242636", fontSize: 10, marginTop: 16 }}>
-          Passwordless sign-in powered by Supabase Auth · Email delivery by Resend
+          Secure access · Identity verified on arrival
         </p>
       </footer>
     </div>

@@ -11,7 +11,7 @@ export default function BusinessLoginPage() {
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setBusy(true);
-    setStatus("Preparing secure access…");
+    setStatus("Signing you in…");
 
     try {
       const response = await fetch("/api/auth/magic-link", {
@@ -38,7 +38,7 @@ export default function BusinessLoginPage() {
         return;
       }
 
-      setStatus(payload.message ?? "Check your email for the sign-in link.");
+      setStatus(payload.message ?? "Signing you in...");
     } catch (err) {
       setStatus(err instanceof Error ? err.message : "Could not start sign in.");
       setBusy(false);
