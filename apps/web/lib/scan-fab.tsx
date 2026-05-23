@@ -22,9 +22,11 @@ export default function ScanFab({ eventId, eventSlug, onScanSuccess }: ScanFabPr
         id="scan-qr-fab"
         onClick={() => setOpen(true)}
         aria-label="Scan QR code"
-        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3.5 rounded-full shadow-lg shadow-brand/30 text-white text-sm font-bold transition-all duration-200 active:scale-95 hover:shadow-xl hover:shadow-brand/40 hover:-translate-y-0.5"
+        className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-5 py-3.5 rounded-full text-sm font-bold transition-all duration-200 active:scale-95 hover:-translate-y-0.5"
         style={{
-          background: "linear-gradient(135deg, rgb(var(--brand-primary)) 0%, rgb(10 80 95) 100%)",
+          background: "#0A0E14",
+          color: "#FFFFFF",
+          boxShadow: "0 10px 28px rgba(15,18,23,0.25), 0 4px 12px rgba(15,18,23,0.1)",
         }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

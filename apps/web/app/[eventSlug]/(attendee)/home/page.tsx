@@ -21,9 +21,18 @@ type AgendaResponse = {
   }>;
 };
 
-const YLW = "#FFD000";
-const BLK = "#17191d";
-const DARK = "#1e2028";
+/* ── Light theme palette ── */
+const YLW       = "#FFD000";
+const YLW_TINT  = "#FFFBE5";
+const INK       = "#0A0E14";
+const INK_BODY  = "#1F2937";
+const INK_MUTED = "#4B5563";
+const INK_LIGHT = "#6B7280";
+const BG        = "#FFFFFF";
+const BG_SOFT   = "#F5F5F7";
+const BORDER    = "#E5E7EB";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
 
 export default async function HomePage() {
   const headerStore = headers();
@@ -49,19 +58,19 @@ export default async function HomePage() {
   }
 
   return (
-    <main style={{ background: BLK, minHeight: "100dvh" }}>
+    <main style={{ background: BG, minHeight: "100dvh" }}>
 
-      {/* ── Hero header ── */}
+      {/* ── Hero header (dark accent band for high contrast) ── */}
       <div style={{
-        padding: "28px 20px 20px", position: "relative", overflow: "hidden",
-        background: "linear-gradient(160deg, #1a1500 0%, #111 55%)",
+        padding: "24px 20px 22px", position: "relative", overflow: "hidden",
+        background: INK,
       }}>
         <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.05,
+          position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.06,
           backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`,
           backgroundSize: "40px 40px",
         }} />
-        <p style={{ color: "rgba(255,208,0,0.4)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>
+        <p style={{ color: YLW, fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>
           SALESGEEK SCOTLAND
         </p>
         <h1 style={{
@@ -72,45 +81,47 @@ export default async function HomePage() {
         </h1>
       </div>
 
-      <div style={{ padding: "12px 16px 120px" }}>
+      <div style={{ padding: "14px 16px 120px" }}>
 
         {/* ── Now / Next ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 4 }}>
-          {/* NOW */}
+          {/* NOW — yellow tint when live */}
           <div style={{
             borderRadius: 12, padding: "14px 14px",
-            background: now
-              ? "linear-gradient(145deg, #1a1500, #111000)"
-              : DARK,
-            border: now ? `1px solid rgba(255,208,0,0.35)` : "1px solid #222",
-            boxShadow: now ? "0 0 24px rgba(255,208,0,0.06)" : "none",
+            background: now ? YLW_TINT : BG_SOFT,
+            border: now ? `1px solid ${YLW}` : `1px solid ${BORDER}`,
+            boxShadow: now ? "0 4px 16px rgba(255,208,0,0.18)" : SHADOW_CARD,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              {now && <span style={{ width: 6, height: 6, borderRadius: "50%", background: YLW }} className="animate-pulse" />}
-              <span style={{ color: now ? YLW : "#787b8f", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em" }}>
+              {now && <span style={{ width: 6, height: 6, borderRadius: "50%", background: INK }} className="animate-pulse" />}
+              <span style={{ color: now ? INK : INK_LIGHT, fontSize: 9, fontWeight: 800, letterSpacing: "0.12em" }}>
                 {now ? "LIVE NOW" : "NOW"}
               </span>
             </div>
-            <p style={{ color: now ? "white" : "#686a7d", fontSize: 12, fontWeight: now ? 700 : 400, lineHeight: 1.4, margin: 0 }}>
+            <p style={{ color: now ? INK : INK_LIGHT, fontSize: 12, fontWeight: now ? 700 : 400, lineHeight: 1.4, margin: 0 }}>
               {now ? now.title : "No live session"}
             </p>
             {now && (
-              <p style={{ color: "rgba(255,208,0,0.4)", fontSize: 10, marginTop: 4 }}>
+              <p style={{ color: INK_MUTED, fontSize: 10, marginTop: 4, fontWeight: 600 }}>
                 until {fmtTime(now.ends_at)}
               </p>
             )}
           </div>
 
           {/* NEXT */}
-          <div style={{ borderRadius: 12, padding: "14px 14px", background: DARK, border: "1px solid #222" }}>
+          <div style={{
+            borderRadius: 12, padding: "14px 14px",
+            background: BG_SOFT, border: `1px solid ${BORDER}`,
+            boxShadow: SHADOW_CARD,
+          }}>
             <div style={{ marginBottom: 6 }}>
-              <span style={{ color: "#787b8f", fontSize: 9, fontWeight: 800, letterSpacing: "0.12em" }}>NEXT UP</span>
+              <span style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 800, letterSpacing: "0.12em" }}>NEXT UP</span>
             </div>
-            <p style={{ color: next ? "#b8bace" : "#686a7d", fontSize: 12, fontWeight: next ? 600 : 400, lineHeight: 1.4, margin: 0 }}>
+            <p style={{ color: next ? INK_BODY : INK_LIGHT, fontSize: 12, fontWeight: next ? 600 : 400, lineHeight: 1.4, margin: 0 }}>
               {next ? next.title : "Nothing scheduled"}
             </p>
             {next && (
-              <p style={{ color: "#8b8fa8", fontSize: 10, marginTop: 4 }}>{fmtTime(next.starts_at)}</p>
+              <p style={{ color: INK_LIGHT, fontSize: 10, marginTop: 4 }}>{fmtTime(next.starts_at)}</p>
             )}
           </div>
         </div>
@@ -122,10 +133,10 @@ export default async function HomePage() {
         <HomeNotificationsClient eventId={eventId} />
 
         {/* ── Announcements ── */}
-        <div style={{ marginTop: 20 }}>
+        <div style={{ marginTop: 24 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-            <h2 style={{ color: "white", fontWeight: 700, fontSize: 14, margin: 0 }}>Announcements</h2>
-            <Link href={`/${slug}/faqs`} style={{ color: "rgba(255,208,0,0.6)", fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
+            <h2 style={{ color: INK, fontWeight: 700, fontSize: 14, margin: 0 }}>Announcements</h2>
+            <Link href={`/${slug}/faqs`} style={{ color: INK_MUTED, fontSize: 11, fontWeight: 600, textDecoration: "none" }}>
               FAQs →
             </Link>
           </div>
@@ -133,20 +144,21 @@ export default async function HomePage() {
           {announcements.length === 0 ? (
             <div style={{
               textAlign: "center", padding: "32px 16px",
-              background: DARK, borderRadius: 12, border: "1px solid #222",
+              background: BG_SOFT, borderRadius: 12, border: `1px solid ${BORDER}`,
             }}>
-              <p style={{ color: "#787b8f", fontSize: 13 }}>No announcements yet</p>
+              <p style={{ color: INK_LIGHT, fontSize: 13 }}>No announcements yet</p>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {announcements.map(a => (
                 <article key={a.id} style={{
                   borderRadius: 12, padding: "14px 16px",
-                  background: DARK, border: "1px solid #222",
+                  background: BG, border: `1px solid ${BORDER}`,
+                  boxShadow: SHADOW_CARD,
                 }}>
-                  <p style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0 }}>{a.title}</p>
-                  <p style={{ color: "#9294a8", fontSize: 12, marginTop: 5, lineHeight: 1.6 }}>{a.body}</p>
-                  <p style={{ color: "#686a7d", fontSize: 10, marginTop: 6 }}>{fmtPosted(a.posted_at)}</p>
+                  <p style={{ color: INK, fontWeight: 700, fontSize: 13, margin: 0 }}>{a.title}</p>
+                  <p style={{ color: INK_BODY, fontSize: 12, marginTop: 5, lineHeight: 1.6 }}>{a.body}</p>
+                  <p style={{ color: INK_LIGHT, fontSize: 10, marginTop: 6 }}>{fmtPosted(a.posted_at)}</p>
                 </article>
               ))}
             </div>

@@ -4,7 +4,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const YLW = "#FFD000";
-const BLK = "#17191d";
+const INK = "#0A0E14";
+const INK_LIGHT = "#6B7280";
+const BORDER = "#E5E7EB";
 
 const TABS = [
   {
@@ -12,7 +14,7 @@ const TABS = [
     label: "Home",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-        stroke={active ? YLW : "#8b8fa8"} strokeWidth="2"
+        stroke={active ? INK : INK_LIGHT} strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round">
         <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
         <polyline points="9 22 9 12 15 12 15 22"/>
@@ -24,7 +26,7 @@ const TABS = [
     label: "Agenda",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-        stroke={active ? YLW : "#8b8fa8"} strokeWidth="2"
+        stroke={active ? INK : INK_LIGHT} strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round">
         <rect width="18" height="18" x="3" y="4" rx="2"/>
         <line x1="16" x2="16" y1="2" y2="6"/>
@@ -38,7 +40,7 @@ const TABS = [
     label: "Geeks",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-        stroke={active ? YLW : "#8b8fa8"} strokeWidth="2"
+        stroke={active ? INK : INK_LIGHT} strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
         <circle cx="9" cy="7" r="4"/>
@@ -52,7 +54,7 @@ const TABS = [
     label: "Rewards",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-        stroke={active ? YLW : "#8b8fa8"} strokeWidth="2"
+        stroke={active ? INK : INK_LIGHT} strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="8" r="6"/>
         <path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
@@ -64,7 +66,7 @@ const TABS = [
     label: "Board",
     icon: (active: boolean) => (
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
-        stroke={active ? YLW : "#8b8fa8"} strokeWidth="2"
+        stroke={active ? INK : INK_LIGHT} strokeWidth="2"
         strokeLinecap="round" strokeLinejoin="round">
         <line x1="18" x2="18" y1="20" y2="10"/>
         <line x1="12" x2="12" y1="20" y2="4"/>
@@ -82,11 +84,11 @@ export default function AttendeeNav({ slug, eventId }: { slug: string; eventId: 
       aria-label="Attendee navigation"
       style={{
         position: "fixed", insetInline: 0, bottom: 0, zIndex: 40,
-        background: "rgba(23,25,29,0.97)",
+        background: "rgba(255,255,255,0.96)",
         backdropFilter: "blur(16px)",
         WebkitBackdropFilter: "blur(16px)",
-        borderTop: "1px solid #222",
-        boxShadow: "0 -4px 24px rgba(0,0,0,0.4)",
+        borderTop: `1px solid ${BORDER}`,
+        boxShadow: "0 -4px 24px rgba(15,18,23,0.06)",
       }}
     >
       <div style={{
@@ -107,7 +109,7 @@ export default function AttendeeNav({ slug, eventId }: { slug: string; eventId: 
                 textAlign: "center",
                 fontSize: 10, fontWeight: 700,
                 letterSpacing: "0.04em",
-                color: active ? YLW : "#8b8fa8",
+                color: active ? INK : INK_LIGHT,
                 textDecoration: "none",
                 transition: "color 150ms, transform 100ms",
                 WebkitTapHighlightColor: "transparent",
@@ -118,8 +120,8 @@ export default function AttendeeNav({ slug, eventId }: { slug: string; eventId: 
                 <span style={{
                   position: "absolute", top: 0, left: "50%",
                   transform: "translateX(-50%)",
-                  width: 28, height: 2, background: YLW,
-                  borderRadius: "0 0 2px 2px",
+                  width: 28, height: 3, background: YLW,
+                  borderRadius: "0 0 3px 3px",
                 }} />
               )}
               {tab.icon(active)}

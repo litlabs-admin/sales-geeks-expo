@@ -11,8 +11,15 @@ type NotificationItem = {
   read_at: string | null;
 };
 
-const YLW = "#FFD000";
-const DARK = "#1e2028";
+/* ── Light theme palette ── */
+const YLW       = "#FFD000";
+const YLW_TINT  = "#FFFBE5";
+const INK       = "#0A0E14";
+const INK_BODY  = "#1F2937";
+const INK_MUTED = "#4B5563";
+const INK_LIGHT = "#6B7280";
+const BG_SOFT   = "#F5F5F7";
+const BORDER    = "#E5E7EB";
 
 export default function HomeNotificationsClient({ eventId }: { eventId: string }) {
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -63,13 +70,13 @@ export default function HomeNotificationsClient({ eventId }: { eventId: string }
   const unreadCount = items.filter(n => !n.read_at).length;
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div style={{ marginTop: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-        <h2 style={{ color: "white", fontWeight: 700, fontSize: 14, margin: 0 }}>Notifications</h2>
+        <h2 style={{ color: INK, fontWeight: 700, fontSize: 14, margin: 0 }}>Notifications</h2>
         {unreadCount > 0 && (
           <span style={{
-            background: YLW, color: "#17191d",
-            borderRadius: 20, padding: "1px 7px",
+            background: INK, color: YLW,
+            borderRadius: 20, padding: "1px 8px",
             fontSize: 10, fontWeight: 800, lineHeight: 1.6,
           }}>
             {unreadCount}
@@ -85,24 +92,25 @@ export default function HomeNotificationsClient({ eventId }: { eventId: string }
             style={{
               width: "100%", textAlign: "left", borderRadius: 10,
               padding: "12px 14px", cursor: n.read_at ? "default" : "pointer",
-              background: n.read_at ? DARK : "rgba(255,208,0,0.07)",
-              border: n.read_at ? "1px solid #222" : "1px solid rgba(255,208,0,0.22)",
+              background: n.read_at ? BG_SOFT : YLW_TINT,
+              border: n.read_at ? `1px solid ${BORDER}` : `1px solid ${YLW}`,
+              fontFamily: "inherit",
             }}>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
               {!n.read_at && (
                 <span style={{
-                  width: 6, height: 6, borderRadius: "50%",
-                  background: YLW, flexShrink: 0, marginTop: 5,
+                  width: 7, height: 7, borderRadius: "50%",
+                  background: INK, flexShrink: 0, marginTop: 5,
                 }} />
               )}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ color: n.read_at ? "#9294a8" : "white", fontWeight: 700, fontSize: 13, margin: 0 }}>
+                <p style={{ color: n.read_at ? INK_MUTED : INK, fontWeight: 700, fontSize: 13, margin: 0 }}>
                   {n.title}
                 </p>
-                <p style={{ color: "#9294a8", fontSize: 12, marginTop: 4, lineHeight: 1.55, margin: "4px 0 0" }}>
+                <p style={{ color: n.read_at ? INK_LIGHT : INK_BODY, fontSize: 12, marginTop: 4, lineHeight: 1.55, marginBottom: 0 }}>
                   {n.body}
                 </p>
-                <p style={{ color: "#686a7d", fontSize: 10, marginTop: 5 }}>
+                <p style={{ color: INK_LIGHT, fontSize: 10, marginTop: 6, fontWeight: 500 }}>
                   {new Date(n.delivered_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}
                 </p>
               </div>

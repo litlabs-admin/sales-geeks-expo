@@ -17,9 +17,18 @@ type Attendee = {
 
 type LeaderboardOwn = { rank: number; alias: string; competition_score: number } | null;
 
-const YLW = "#FFD000";
-const BLK = "#17191d";
-const DARK = "#1e2028";
+/* ── Light theme palette ── */
+const YLW       = "#FFD000";
+const YLW_TINT  = "#FFFBE5";
+const INK       = "#0A0E14";
+const INK_BODY  = "#1F2937";
+const INK_MUTED = "#4B5563";
+const INK_LIGHT = "#6B7280";
+const BG        = "#FFFFFF";
+const BG_SOFT   = "#F5F5F7";
+const BORDER    = "#E5E7EB";
+
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
 
 /* ── Stat card with optional flash ── */
 function StatCard({ label, value, accent, big }: { label: string; value: string | number; accent?: boolean; big?: boolean }) {
@@ -37,17 +46,17 @@ function StatCard({ label, value, accent, big }: { label: string; value: string 
   return (
     <div style={{
       borderRadius: 10, padding: "14px 10px", textAlign: "center",
-      background: accent ? "rgba(255,208,0,0.08)" : DARK,
-      border: accent ? "1px solid rgba(255,208,0,0.2)" : "1px solid #222",
+      background: accent ? YLW_TINT : BG_SOFT,
+      border: accent ? `1px solid ${YLW}` : `1px solid ${BORDER}`,
     }}>
-      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: accent ? "rgba(255,208,0,0.5)" : "#787b8f", margin: 0 }}>
+      <p style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: accent ? INK : INK_LIGHT, margin: 0 }}>
         {label}
       </p>
       <p style={{
         fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
         fontWeight: 800,
         fontSize: big ? 28 : 22,
-        color: accent ? YLW : "#b8bace",
+        color: INK,
         margin: "4px 0 0", lineHeight: 1,
         animation: flashing ? "score-flash 0.55s cubic-bezier(0.34,1.56,0.64,1) both" : "none",
       }}>
@@ -60,10 +69,10 @@ function StatCard({ label, value, accent, big }: { label: string; value: string 
 /* ── Status dot ── */
 function StatusDot({ active, label, warn }: { active: boolean; label: string; warn?: boolean }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "#8b8fa8" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: INK_MUTED, fontWeight: 500 }}>
       <span style={{
-        width: 6, height: 6, borderRadius: "50%",
-        background: active ? "#10b981" : warn ? "#f59e0b" : "#686a7d",
+        width: 7, height: 7, borderRadius: "50%",
+        background: active ? "#10b981" : warn ? "#f59e0b" : "#9CA3AF",
       }} />
       {label}
     </span>
@@ -119,11 +128,11 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
 
   if (loading && !attendee) {
     return (
-      <section style={{ borderRadius: 14, overflow: "hidden", background: DARK, border: "1px solid #222", marginTop: 16 }}>
+      <section style={{ borderRadius: 14, overflow: "hidden", background: BG, border: `1px solid ${BORDER}`, marginTop: 16, boxShadow: SHADOW_LIFT }}>
         <div style={{ padding: 20 }}>
-          <div className="skeleton-dark" style={{ height: 14, width: 120, marginBottom: 16 }} />
+          <div style={{ height: 14, width: 120, marginBottom: 16, background: BG_SOFT, borderRadius: 4 }} />
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-            {[1, 2, 3, 4].map(i => <div key={i} className="skeleton-dark" style={{ height: 64 }} />)}
+            {[1, 2, 3, 4].map(i => <div key={i} style={{ height: 64, background: BG_SOFT, borderRadius: 8 }} />)}
           </div>
         </div>
       </section>
@@ -134,15 +143,16 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
     return (
       <section style={{
         marginTop: 16, borderRadius: 14, padding: 20,
-        background: DARK, border: "1px solid #222",
+        background: BG, border: `1px solid ${BORDER}`,
+        boxShadow: SHADOW_LIFT,
         animation: "slide-up 0.35s ease-out both",
       }}>
-        <p style={{ color: "white", fontWeight: 700, fontSize: 15 }}>Your Progress</p>
-        <p style={{ color: "#8b8fa8", fontSize: 13, marginTop: 6 }}>{status}</p>
+        <p style={{ color: INK, fontWeight: 700, fontSize: 15 }}>Your Progress</p>
+        <p style={{ color: INK_MUTED, fontSize: 13, marginTop: 6 }}>{status}</p>
         <Link href={`/${slug}/join`} style={{
           display: "inline-flex", alignItems: "center", gap: 8,
           marginTop: 14, padding: "10px 18px", borderRadius: 8,
-          background: YLW, color: BLK, fontWeight: 800, fontSize: 13,
+          background: YLW, color: INK, fontWeight: 800, fontSize: 13,
           textDecoration: "none",
         }}>
           Join or Sign In
@@ -157,20 +167,20 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
   return (
     <section style={{
       marginTop: 16, borderRadius: 14, overflow: "hidden",
-      background: DARK, border: "1px solid #222",
-      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+      background: BG, border: `1px solid ${BORDER}`,
+      boxShadow: SHADOW_LIFT,
       animation: "slide-up 0.35s ease-out both",
     }}>
       {/* Header */}
       <div style={{
         padding: "14px 16px 12px",
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        borderBottom: "1px solid #1f2130",
+        borderBottom: `1px solid ${BORDER}`,
       }}>
         <div>
-          <p style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0 }}>Your Progress</p>
+          <p style={{ color: INK, fontWeight: 700, fontSize: 13, margin: 0 }}>Your Progress</p>
           {lastUpdated && (
-            <p style={{ color: "#686a7d", fontSize: 9, marginTop: 3, letterSpacing: "0.04em" }}>
+            <p style={{ color: INK_LIGHT, fontSize: 9, marginTop: 3, letterSpacing: "0.04em", fontWeight: 500 }}>
               UPDATED {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
             </p>
           )}
@@ -180,10 +190,11 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
           style={{
             display: "flex", alignItems: "center", gap: 6,
             padding: "7px 12px", borderRadius: 7,
-            background: "#242636", border: "1px solid #282b3a",
-            color: refreshing ? YLW : "#8b8fa8", fontSize: 11, fontWeight: 700,
+            background: BG_SOFT, border: `1px solid ${BORDER}`,
+            color: refreshing ? INK : INK_MUTED, fontSize: 11, fontWeight: 700,
             cursor: "pointer", touchAction: "manipulation",
             transition: "color 150ms",
+            fontFamily: "inherit",
           }}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
             style={{ animation: refreshing ? "spin 0.8s linear infinite" : "none" }}>
@@ -207,12 +218,13 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
       {/* Status bar */}
       <div style={{
         padding: "9px 16px",
-        borderTop: "1px solid #1f2130",
+        borderTop: `1px solid ${BORDER}`,
+        background: BG_SOFT,
         display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap",
       }}>
         <StatusDot active={!!attendee?.is_verified} label={attendee?.is_verified ? "Verified" : "Unverified"} warn={!attendee?.is_verified} />
         <StatusDot active={!!attendee?.checked_in_at} label={attendee?.checked_in_at ? "Checked in" : "Not checked in"} />
-        {status && <span style={{ color: "#787b8f", fontSize: 11 }}>{status}</span>}
+        {status && <span style={{ color: INK_LIGHT, fontSize: 11 }}>{status}</span>}
       </div>
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

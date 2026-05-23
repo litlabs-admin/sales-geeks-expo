@@ -4,8 +4,15 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
-const YLW = "#FFD000";
-const BLK = "#17191d";
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_YLW = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
 
 export default function WelcomeClient({ eventId, slug }: { eventId: string; slug: string }) {
   const router = useRouter();
@@ -87,7 +94,7 @@ export default function WelcomeClient({ eventId, slug }: { eventId: string; slug
     <main
       style={{
         minHeight: "100dvh",
-        background: BLK,
+        background: BG,
         display: "flex",
         flexDirection: "column",
         justifyContent: "center",
@@ -95,19 +102,19 @@ export default function WelcomeClient({ eventId, slug }: { eventId: string; slug
       }}
     >
       <div style={{ maxWidth: 420, margin: "0 auto", width: "100%" }}>
-        <p style={{ color: YLW, fontSize: 12, fontWeight: 800, letterSpacing: "0.08em" }}>
+        <p style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", borderLeft: `3px solid ${YLW}`, paddingLeft: 10 }}>
           SALESGEEK SCOTLAND
         </p>
-        <h1 style={{ color: "#fff", fontSize: 28, fontWeight: 800, margin: "10px 0 6px" }}>
+        <h1 style={{ color: INK, fontSize: 28, fontWeight: 800, margin: "14px 0 6px", letterSpacing: "-0.01em" }}>
           Choose your display name
         </h1>
-        <p style={{ color: "#9294a8", fontSize: 14, lineHeight: 1.6, margin: "0 0 24px" }}>
+        <p style={{ color: INK_BODY, fontSize: 14, lineHeight: 1.6, margin: "0 0 24px" }}>
           This is how you&apos;ll appear on the leaderboard and when others connect with you.
           It must be unique — your email stays private and can&apos;t be changed.
         </p>
 
         {phase === "loading" ? (
-          <p style={{ color: "#c7c9d6", fontSize: 14 }}>Loading…</p>
+          <p style={{ color: INK_LIGHT, fontSize: 14 }}>Loading…</p>
         ) : (
           <form onSubmit={save}>
             <input
@@ -119,10 +126,10 @@ export default function WelcomeClient({ eventId, slug }: { eventId: string; slug
               onChange={(e) => setAlias(e.target.value)}
               style={{
                 width: "100%",
-                background: "#1e2028",
-                border: "1px solid #2d3040",
+                background: BG,
+                border: `1.5px solid ${BORDER_STRONG}`,
                 borderRadius: 10,
-                color: "#fff",
+                color: INK,
                 fontSize: 16,
                 padding: "14px 16px",
                 outline: "none",
@@ -130,7 +137,7 @@ export default function WelcomeClient({ eventId, slug }: { eventId: string; slug
               }}
             />
             {error && (
-              <p style={{ color: "#ef4444", fontSize: 13, margin: "10px 0 0" }}>{error}</p>
+              <p style={{ color: "#dc2626", fontSize: 13, margin: "10px 0 0" }}>{error}</p>
             )}
             <button
               type="submit"
@@ -139,7 +146,7 @@ export default function WelcomeClient({ eventId, slug }: { eventId: string; slug
                 width: "100%",
                 marginTop: 16,
                 background: YLW,
-                color: BLK,
+                color: INK,
                 fontWeight: 800,
                 fontSize: 15,
                 padding: "14px 0",
@@ -148,6 +155,7 @@ export default function WelcomeClient({ eventId, slug }: { eventId: string; slug
                 cursor: "pointer",
                 opacity: phase === "saving" ? 0.7 : 1,
                 fontFamily: "inherit",
+                boxShadow: SHADOW_YLW,
               }}
             >
               {phase === "saving" ? "Saving…" : "Continue to the app →"}

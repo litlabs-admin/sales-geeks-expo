@@ -9,6 +9,17 @@ type JoinFormProps = {
   eventSlug: string;
 };
 
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BORDER        = "#E5E7EB";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_YLW = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
+
 function normalizedEmail(value: string) {
   return value.trim().toLowerCase();
 }
@@ -104,13 +115,13 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
     };
 
     if (!response.ok) {
-      setStatus(payload.error ?? "Could not send the sign-in link.");
+      setStatus(payload.error ?? "Could not sign you in.");
       setSentTo("");
       return;
     }
 
     if (payload.dev_verify_url) {
-      setStatus(payload.message ?? "Opening seeded test account...");
+      setStatus(payload.message ?? "Signing you in...");
       window.location.assign(payload.dev_verify_url);
       return;
     }
@@ -120,22 +131,59 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
   }
 
   return (
-    <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
-      <p className="text-sm text-slate-700">{status}</p>
-      {sentTo ? <p className="mt-2 text-xs text-slate-500">Sent to {sentTo}</p> : null}
+    <div
+      style={{
+        marginTop: 24,
+        padding: 20,
+        borderRadius: 12,
+        background: BG,
+        border: `1px solid ${BORDER}`,
+        boxShadow: "0 1px 2px rgba(15,18,23,0.04)",
+      }}
+    >
+      <p style={{ color: INK_BODY, fontSize: 14, margin: 0, lineHeight: 1.55 }}>{status}</p>
+      {sentTo ? (
+        <p style={{ color: INK_LIGHT, fontSize: 12, marginTop: 8, wordBreak: "break-all" }}>
+          Sent to {sentTo}
+        </p>
+      ) : null}
       {!isCheckingSession ? (
-        <form className="mt-4 grid gap-3" onSubmit={requestMagicLink}>
+        <form style={{ marginTop: 16, display: "grid", gap: 12 }} onSubmit={requestMagicLink}>
           <input
             autoComplete="email"
-            className="rounded-md border border-slate-300 px-3 py-2 text-base"
             name="email"
             onChange={(event) => setEmail(event.target.value)}
             placeholder="you@example.com"
             required
             type="email"
             value={email}
+            style={{
+              background: BG,
+              border: `1.5px solid ${BORDER_STRONG}`,
+              borderRadius: 10,
+              color: INK,
+              fontSize: 16,
+              padding: "12px 14px",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
           />
-          <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" type="submit">
+          <button
+            type="submit"
+            style={{
+              background: YLW,
+              color: INK,
+              fontWeight: 800,
+              fontSize: 14,
+              padding: "12px 0",
+              borderRadius: 10,
+              border: "none",
+              cursor: "pointer",
+              letterSpacing: "0.03em",
+              fontFamily: "inherit",
+              boxShadow: SHADOW_YLW,
+            }}
+          >
             Continue
           </button>
         </form>

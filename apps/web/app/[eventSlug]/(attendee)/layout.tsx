@@ -59,18 +59,18 @@ export default async function AttendeeLayout({ children, params }: { children: R
   }
 
   return (
-    <div style={{ minHeight: "100dvh", paddingBottom: 80, background: "#17191d" }}>
+    <div style={{ minHeight: "100dvh", paddingBottom: 80, background: "#FFFFFF" }}>
       <div style={{
         position: "sticky", top: 0, zIndex: 50,
-        background: "rgba(23,25,29,0.95)",
+        background: "rgba(255,255,255,0.95)",
         backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)",
-        borderBottom: "1px solid #222",
+        borderBottom: "1px solid #E5E7EB",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 16px", height: 40,
       }}>
         <Link href="/" style={{
           display: "flex", alignItems: "center", gap: 6,
-          color: "#a8abbe", fontSize: 12, fontWeight: 600,
+          color: "#4B5563", fontSize: 12, fontWeight: 600,
           textDecoration: "none", letterSpacing: "0.02em",
         }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -82,8 +82,8 @@ export default async function AttendeeLayout({ children, params }: { children: R
         <Link href={`/${slug}/profile`} aria-label="My profile & QR code" style={{
           display: "flex", alignItems: "center", justifyContent: "center",
           width: 30, height: 30, borderRadius: "50%",
-          background: "#1e2028", border: "1px solid #282b3a",
-          color: "#9294a8", textDecoration: "none",
+          background: "#F5F5F7", border: "1px solid #E5E7EB",
+          color: "#0A0E14", textDecoration: "none",
           transition: "border-color 150ms, color 150ms",
         }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
