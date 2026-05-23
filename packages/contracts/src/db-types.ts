@@ -29,6 +29,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["events"]["Insert"]>;
+        Relationships: [];
       };
       users: {
         Row: {
@@ -48,6 +49,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["users"]["Insert"]>;
+        Relationships: [];
       };
       audit_logs: {
         Row: {
@@ -73,6 +75,7 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["audit_logs"]["Insert"]>;
+        Relationships: [];
       };
       attendees: {
         Row: {
@@ -110,6 +113,7 @@ export type Database = {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["attendees"]["Insert"]>;
+        Relationships: [];
       };
       pending_scans: {
         Row: {
@@ -127,6 +131,7 @@ export type Database = {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["pending_scans"]["Insert"]>;
+        Relationships: [];
       };
     };
     Views: {
