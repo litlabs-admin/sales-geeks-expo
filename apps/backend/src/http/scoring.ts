@@ -519,6 +519,201 @@ export async function replayPendingScans(input: {
   }
 }
 
+/* ── Timed leaderboard blocks ──────────────────────────────────────────────
+   Three fixed 2-hour blocks (09:00–11:00, 11:00–13:00, 13:00–15:00) anchored
+   to the event's local day in Europe/London. When a block ends, the current
+   #1 attendee is lazily snapshotted into public.leaderboard_winners on the
+   first read. The unique (event_id, block_key) index makes the insert
+   race-safe.
+   To change blocks per future event, edit BLOCK_DEFS or move into event
+   config (events.feature_flags). ───────────────────────────────────────── */
+
+type BlockDef = { key: string; label: string; startHour: number; endHour: number };
+
+const BLOCK_DEFS: BlockDef[] = [
+  { key: "block_1", label: "Morning Block",   startHour:  9, endHour: 11 },
+  { key: "block_2", label: "Midday Block",    startHour: 11, endHour: 13 },
+  { key: "block_3", label: "Afternoon Block", startHour: 13, endHour: 15 }
+];
+
+type BlockTimes = {
+  key: string;
+  label: string;
+  starts_at: Date;
+  ends_at: Date;
+};
+
+type LiveLeader = { alias: string; competition_score: number } | null;
+
+type LockedWinner = {
+  alias: string | null;
+  competition_score: number;
+  locked_at: Date;
+} | null;
+
+async function blockTimesForEvent(eventId: string): Promise<BlockTimes[]> {
+  // Anchor blocks to the event's local-day in Europe/London. Postgres handles
+  // the timezone math so we get correct BST/GMT offsets without a JS TZ lib.
+  // Hours are multiplied by the integer constant — pure SQL math, no
+  // parameter goes inside an `interval '...'` literal (which would fail to
+  // parse since postgres.js parameterizes ${} substitutions).
+  const rows = await sql<Array<{
+    block_1_starts_at: Date; block_1_ends_at: Date;
+    block_2_starts_at: Date; block_2_ends_at: Date;
+    block_3_starts_at: Date; block_3_ends_at: Date;
+  }>>`
+    with day_anchor as (
+      select
+        (date_trunc('day', e.starts_at at time zone 'Europe/London')
+          at time zone 'Europe/London') as day_start
+      from public.events e
+      where e.id = ${eventId}
+    )
+    select
+      day_start + (interval '1 hour' * ${BLOCK_DEFS[0].startHour}::int) as block_1_starts_at,
+      day_start + (interval '1 hour' * ${BLOCK_DEFS[0].endHour}::int)   as block_1_ends_at,
+      day_start + (interval '1 hour' * ${BLOCK_DEFS[1].startHour}::int) as block_2_starts_at,
+      day_start + (interval '1 hour' * ${BLOCK_DEFS[1].endHour}::int)   as block_2_ends_at,
+      day_start + (interval '1 hour' * ${BLOCK_DEFS[2].startHour}::int) as block_3_starts_at,
+      day_start + (interval '1 hour' * ${BLOCK_DEFS[2].endHour}::int)   as block_3_ends_at
+    from day_anchor
+  `;
+  if (!rows[0]) {
+    throw new HTTPException(404, { message: "Event not found" });
+  }
+  return [
+    { key: BLOCK_DEFS[0].key, label: BLOCK_DEFS[0].label, starts_at: rows[0].block_1_starts_at, ends_at: rows[0].block_1_ends_at },
+    { key: BLOCK_DEFS[1].key, label: BLOCK_DEFS[1].label, starts_at: rows[0].block_2_starts_at, ends_at: rows[0].block_2_ends_at },
+    { key: BLOCK_DEFS[2].key, label: BLOCK_DEFS[2].label, starts_at: rows[0].block_3_starts_at, ends_at: rows[0].block_3_ends_at }
+  ];
+}
+
+async function currentLeaderForEvent(eventId: string): Promise<LiveLeader> {
+  const rows = await sql<Array<{ alias: string; competition_score: number }>>`
+    select alias, competition_score
+    from public.attendees
+    where event_id = ${eventId}
+    order by competition_score desc, reached_current_score_at asc nulls last, id asc
+    limit 1
+  `;
+  return rows[0] ?? null;
+}
+
+async function lockWinnerForBlock(input: {
+  eventId: string;
+  blockKey: string;
+  startsAt: Date;
+  endsAt: Date;
+}): Promise<LockedWinner> {
+  const existing = await sql<Array<{ alias: string | null; competition_score: number; locked_at: Date }>>`
+    select alias, competition_score, locked_at
+    from public.leaderboard_winners
+    where event_id = ${input.eventId} and block_key = ${input.blockKey}
+    limit 1
+  `;
+  if (existing[0]) return existing[0];
+
+  // Snapshot the current #1. If no attendees exist, record an empty winner
+  // row so we don't re-query every refresh.
+  const top = await sql<Array<{ id: string; alias: string; competition_score: number }>>`
+    select id, alias, competition_score
+    from public.attendees
+    where event_id = ${input.eventId}
+    order by competition_score desc, reached_current_score_at asc nulls last, id asc
+    limit 1
+  `;
+
+  await sql`
+    insert into public.leaderboard_winners (
+      event_id, block_key, block_starts_at, block_ends_at,
+      attendee_id, alias, competition_score
+    )
+    values (
+      ${input.eventId}, ${input.blockKey}, ${input.startsAt}, ${input.endsAt},
+      ${top[0]?.id ?? null}, ${top[0]?.alias ?? null}, ${top[0]?.competition_score ?? 0}
+    )
+    on conflict (event_id, block_key) do nothing
+  `;
+
+  const after = await sql<Array<{ alias: string | null; competition_score: number; locked_at: Date }>>`
+    select alias, competition_score, locked_at
+    from public.leaderboard_winners
+    where event_id = ${input.eventId} and block_key = ${input.blockKey}
+    limit 1
+  `;
+  return after[0] ?? null;
+}
+
+export async function getLeaderboardBlocks(c: Context) {
+  const eventId = c.req.query("event_id");
+  if (!eventId) {
+    throw new HTTPException(400, { message: "event_id is required" });
+  }
+
+  const blockTimes = await blockTimesForEvent(eventId);
+  const now = new Date();
+
+  const blocks = [] as Array<{
+    key: string;
+    label: string;
+    starts_at: string;
+    ends_at: string;
+    status: "pending" | "active" | "ended";
+    seconds_until_start: number;
+    seconds_until_end: number;
+    winner: LockedWinner;
+    live_leader: LiveLeader;
+  }>;
+
+  // Reuse one live-leader query for any active block — cheap query, no need
+  // to repeat.
+  let liveLeader: LiveLeader = null;
+  let leaderFetched = false;
+
+  for (const b of blockTimes) {
+    const starts = new Date(b.starts_at).getTime();
+    const ends = new Date(b.ends_at).getTime();
+    const nowMs = now.getTime();
+
+    let status: "pending" | "active" | "ended";
+    if (nowMs < starts) status = "pending";
+    else if (nowMs < ends) status = "active";
+    else status = "ended";
+
+    let winner: LockedWinner = null;
+    let liveForBlock: LiveLeader = null;
+
+    if (status === "ended") {
+      winner = await lockWinnerForBlock({
+        eventId,
+        blockKey: b.key,
+        startsAt: b.starts_at,
+        endsAt: b.ends_at
+      });
+    } else if (status === "active") {
+      if (!leaderFetched) {
+        liveLeader = await currentLeaderForEvent(eventId);
+        leaderFetched = true;
+      }
+      liveForBlock = liveLeader;
+    }
+
+    blocks.push({
+      key: b.key,
+      label: b.label,
+      starts_at: b.starts_at.toISOString(),
+      ends_at: b.ends_at.toISOString(),
+      status,
+      seconds_until_start: Math.max(0, Math.floor((starts - nowMs) / 1000)),
+      seconds_until_end:   Math.max(0, Math.floor((ends - nowMs) / 1000)),
+      winner,
+      live_leader: liveForBlock
+    });
+  }
+
+  return c.json({ blocks, server_time: now.toISOString() });
+}
+
 export async function getLeaderboard(c: Context) {
   const actor = c.get("actor") as Actor;
   const eventId = c.req.query("event_id");

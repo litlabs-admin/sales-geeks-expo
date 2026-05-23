@@ -30,7 +30,7 @@ import {
   verifyScanSignature
 } from "./businesses";
 import { listEvents, transitionEvent } from "./events";
-import { awardScanRoute, getLeaderboard } from "./scoring";
+import { awardScanRoute, getLeaderboard, getLeaderboardBlocks } from "./scoring";
 import {
   calendlyWebhookRoute,
   claimWilliamRoute,
@@ -115,6 +115,7 @@ export function createApp() {
   app.get("/scan/:code", verifyScanSignature);
   app.post("/scan/:code", requireSupabaseJwt, archiveMutationGuard, awardScanRoute);
   app.get("/leaderboard", requireSupabaseJwt, getLeaderboard);
+  app.get("/leaderboard/blocks", requireSupabaseJwt, getLeaderboardBlocks);
   app.get("/leaderboard/connections", requireSupabaseJwt, getConnectionLeaderboard);
   app.post("/attendees/connect", requireSupabaseJwt, archiveMutationGuard, recordConnection);
   app.get("/attendees/connections", requireSupabaseJwt, getMyConnections);

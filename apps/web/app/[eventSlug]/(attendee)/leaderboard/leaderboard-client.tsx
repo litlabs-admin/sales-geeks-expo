@@ -401,9 +401,241 @@ function ConnectionsTab({ eventId }: { eventId: string }) {
   );
 }
 
+/* ── Timed Blocks tab ─────────────────────────────────────────────────────
+   Three fixed 2-hour blocks per event day: Morning (9–11), Midday (11–1),
+   Afternoon (1–3). Backend lazy-locks the #1 attendee at each block's end.
+   This view shows: pending blocks count down to start, active blocks show
+   live leader + countdown to end, ended blocks display locked winner.
+   ─────────────────────────────────────────────────────────────────────── */
+
+type BlockStatus = "pending" | "active" | "ended";
+
+type BlockRow = {
+  key: string;
+  label: string;
+  starts_at: string;
+  ends_at: string;
+  status: BlockStatus;
+  seconds_until_start: number;
+  seconds_until_end: number;
+  winner: { alias: string | null; competition_score: number; locked_at: string } | null;
+  live_leader: { alias: string; competition_score: number } | null;
+};
+
+function fmtBlockTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtCountdown(seconds: number) {
+  if (seconds <= 0) return "0s";
+  const days = Math.floor(seconds / 86400);
+  if (days >= 1) return `${days}d ${Math.floor((seconds % 86400) / 3600)}h`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
+
+function BlockCard({ block, tick }: { block: BlockRow; tick: number }) {
+  // Re-derive seconds locally so the countdown decrements every second
+  // without waiting for the next 15s server refresh.
+  const startMs = new Date(block.starts_at).getTime();
+  const endMs = new Date(block.ends_at).getTime();
+  const nowMs = Date.now();
+  const liveSecsToStart = Math.max(0, Math.floor((startMs - nowMs) / 1000));
+  const liveSecsToEnd   = Math.max(0, Math.floor((endMs - nowMs) / 1000));
+  // Reference `tick` to keep React re-rendering each second.
+  void tick;
+
+  const isActive  = block.status === "active";
+  const isPending = block.status === "pending";
+  const isEnded   = block.status === "ended";
+
+  return (
+    <article style={{
+      borderRadius: 14, overflow: "hidden",
+      background: isActive ? YLW_TINT : BG,
+      border: isActive ? `1px solid ${YLW}` : `1px solid ${BORDER}`,
+      boxShadow: isActive ? "0 8px 28px rgba(255,208,0,0.18), 0 2px 6px rgba(15,18,23,0.04)" : SHADOW_CARD,
+    }}>
+      <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <p style={{ color: INK, fontWeight: 800, fontSize: 14, margin: 0, letterSpacing: "-0.01em" }}>
+            {block.label}
+          </p>
+          <p style={{ color: INK_MUTED, fontSize: 11, margin: "3px 0 0", fontWeight: 600 }}>
+            {fmtBlockTime(block.starts_at)} – {fmtBlockTime(block.ends_at)}
+          </p>
+        </div>
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "4px 10px", borderRadius: 999,
+          background: isActive ? INK : isPending ? BG_SOFT : "#10b98115",
+          color: isActive ? YLW : isPending ? INK_MUTED : "#047857",
+          fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase",
+          border: isPending ? `1px solid ${BORDER}` : "none",
+        }}>
+          {isActive && <span style={{ width: 6, height: 6, borderRadius: "50%", background: YLW }} className="animate-pulse" />}
+          {isActive ? "Live" : isPending ? "Soon" : "Locked"}
+        </span>
+      </div>
+
+      <div style={{ padding: "0 16px 14px" }}>
+        {isActive && (
+          <>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+              <span style={{ color: INK_MUTED, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>ENDS IN</span>
+              <span style={{
+                fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
+                fontWeight: 800, fontSize: 26, color: INK, lineHeight: 1,
+              }}>
+                {fmtCountdown(liveSecsToEnd)}
+              </span>
+            </div>
+            {block.live_leader ? (
+              <div style={{
+                background: BG, borderRadius: 10, padding: "10px 12px",
+                border: `1px solid ${YLW}`, display: "flex", alignItems: "center", gap: 10,
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                  background: YLW, color: INK,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
+                  fontWeight: 800, fontSize: 16,
+                }}>
+                  {block.live_leader.alias.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", margin: 0 }}>CURRENT LEADER</p>
+                  <p style={{ color: INK, fontSize: 14, fontWeight: 700, margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {block.live_leader.alias}
+                  </p>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{
+                    fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
+                    fontWeight: 800, fontSize: 22, color: INK, margin: 0, lineHeight: 1,
+                  }}>
+                    {block.live_leader.competition_score}
+                  </p>
+                  <p style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", margin: "2px 0 0" }}>PTS</p>
+                </div>
+              </div>
+            ) : (
+              <p style={{ color: INK_MUTED, fontSize: 12 }}>No one on the board yet — start scanning!</p>
+            )}
+          </>
+        )}
+
+        {isPending && (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>STARTS IN</span>
+            <span style={{
+              fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
+              fontWeight: 800, fontSize: 20, color: INK_MUTED, lineHeight: 1,
+            }}>
+              {fmtCountdown(liveSecsToStart)}
+            </span>
+          </div>
+        )}
+
+        {isEnded && (
+          block.winner && block.winner.alias ? (
+            <div style={{
+              background: BG_SOFT, borderRadius: 10, padding: "10px 12px",
+              border: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 10,
+            }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: "50%", flexShrink: 0,
+                background: YLW, color: INK,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
+                fontWeight: 800, fontSize: 18,
+              }}>
+                🏆
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", margin: 0 }}>BLOCK WINNER</p>
+                <p style={{ color: INK, fontSize: 14, fontWeight: 700, margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {block.winner.alias}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{
+                  fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
+                  fontWeight: 800, fontSize: 22, color: INK, margin: 0, lineHeight: 1,
+                }}>
+                  {block.winner.competition_score}
+                </p>
+                <p style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", margin: "2px 0 0" }}>PTS</p>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: INK_MUTED, fontSize: 12 }}>Block ended — no entries scored.</p>
+          )
+        )}
+      </div>
+    </article>
+  );
+}
+
+function BlocksTab({ eventId }: { eventId: string }) {
+  const [blocks, setBlocks] = useState<BlockRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tick, setTick] = useState(0);
+
+  const load = useCallback(async () => {
+    try {
+      const supabase = createBrowserSupabaseClient();
+      const { data } = await supabase.auth.getSession();
+      const token = data.session?.access_token;
+      if (!token) return;
+      const res = await fetch(`/api/leaderboard/blocks?event_id=${eventId}`, {
+        headers: { authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const body = await res.json() as { blocks: BlockRow[] };
+      setBlocks(body.blocks ?? []);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [eventId]);
+
+  useEffect(() => {
+    void load();
+    const refresh = window.setInterval(() => void load(), 15_000);
+    // 1s tick so the live countdown updates between server refreshes
+    const ticker = window.setInterval(() => setTick(t => t + 1), 1000);
+    return () => { window.clearInterval(refresh); window.clearInterval(ticker); };
+  }, [load]);
+
+  if (loading) {
+    return (
+      <div style={{ padding: "16px 16px 120px" }}>
+        {[1, 2, 3].map(i => (
+          <div key={i} style={{ height: 130, borderRadius: 14, marginBottom: 10, background: BG_SOFT, animation: "shimmer 1.4s ease-in-out infinite" }} />
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding: "0 16px 120px" }}>
+      <p style={{ color: INK_MUTED, fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+        Three 2-hour blocks across the day. Whoever&apos;s top of the leaderboard when a block ends wins that block.
+      </p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {blocks.map(b => <BlockCard key={b.key} block={b} tick={tick} />)}
+      </div>
+    </div>
+  );
+}
+
 /* ── Root component ── */
 export function LeaderboardClient({ eventId }: { eventId: string }) {
-  const [tab, setTab] = useState<"points" | "connections">("points");
+  const [tab, setTab] = useState<"points" | "blocks" | "connections">("points");
 
   return (
     <div style={{ background: BG, minHeight: "100dvh" }}>
@@ -422,8 +654,8 @@ export function LeaderboardClient({ eventId }: { eventId: string }) {
         }}>LEADERBOARD</h1>
 
         {/* Tabs */}
-        <div style={{ display: "flex", gap: 8 }}>
-          {(["points", "connections"] as const).map((t) => (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {(["points", "blocks", "connections"] as const).map((t) => (
             <button key={t} onClick={() => setTab(t)}
               style={{
                 padding: "7px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700,
@@ -434,14 +666,16 @@ export function LeaderboardClient({ eventId }: { eventId: string }) {
                 textTransform: "uppercase", letterSpacing: "0.06em",
                 fontFamily: "inherit",
               }}>
-              {t === "points" ? "Points" : "Connections"}
+              {t === "points" ? "Points" : t === "blocks" ? "Blocks" : "Connections"}
             </button>
           ))}
         </div>
       </div>
 
       <div style={{ paddingTop: 16 }}>
-        {tab === "points" ? <PointsTab eventId={eventId} /> : <ConnectionsTab eventId={eventId} />}
+        {tab === "points" && <PointsTab eventId={eventId} />}
+        {tab === "blocks" && <BlocksTab eventId={eventId} />}
+        {tab === "connections" && <ConnectionsTab eventId={eventId} />}
       </div>
 
       <style>{`

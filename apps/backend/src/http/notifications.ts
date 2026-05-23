@@ -271,6 +271,49 @@ export async function opsDashboard(c: Context) {
     throw new HTTPException(400, { message: "event_id is required" });
   }
 
+  // Live stats: small, fast counts that drive the TV-readable header tiles
+  // (Registered, Checked In, OTP Verified, QR Scans, Rewards Out, Total
+  // Connections). Computed in parallel; degrade individually on failure so a
+  // single broken counter never blanks the whole dashboard.
+  const [attendeeStats, scanStats, redemptionStats, connectionStats] = await Promise.all([
+    sql<Array<{ total: number; checked_in: number; verified: number }>>`
+      select
+        count(*)::int as total,
+        count(*) filter (where checked_in_at is not null)::int as checked_in,
+        count(*) filter (where is_verified)::int as verified
+      from public.attendees
+      where event_id = ${eventId}
+    `.catch(() => [{ total: 0, checked_in: 0, verified: 0 }]),
+    sql<Array<{ total: number }>>`
+      select count(*)::int as total from public.scan_records where event_id = ${eventId}
+    `.catch(() => [{ total: 0 }]),
+    sql<Array<{ total: number }>>`
+      select count(*)::int as total
+      from public.redemption_records
+      where event_id = ${eventId} and state <> 'reversed'
+    `.catch(() => [{ total: 0 }]),
+    sql<Array<{ total: number; last_hour: number; last_5m: number }>>`
+      select
+        count(*)::int as total,
+        count(*) filter (where created_at > now() - interval '1 hour')::int as last_hour,
+        count(*) filter (where created_at > now() - interval '5 minutes')::int as last_5m
+      from public.attendee_connections
+      where event_id = ${eventId}
+    `.catch(() => [{ total: 0, last_hour: 0, last_5m: 0 }])
+  ]);
+
+  const stats = {
+    total_attendees:        attendeeStats[0]?.total ?? 0,
+    checked_in:             attendeeStats[0]?.checked_in ?? 0,
+    verified:               attendeeStats[0]?.verified ?? 0,
+    total_scans:            scanStats[0]?.total ?? 0,
+    rewards_redeemed:       redemptionStats[0]?.total ?? 0,
+    total_connections:      connectionStats[0]?.total ?? 0,
+    connections_last_hour:  connectionStats[0]?.last_hour ?? 0,
+    connections_last_5m:    connectionStats[0]?.last_5m ?? 0,
+    health:                 "healthy" as const
+  };
+
   const widgets = await Promise.all([
     widget("db_health", () => sql`select now() as checked_at, true as reachable`),
     widget("checkins", () => sql`select * from public.vw_ops_checkins where event_id = ${eventId}`),
@@ -283,5 +326,5 @@ export async function opsDashboard(c: Context) {
     widget("recent_audit", () => sql`select * from public.vw_ops_recent_audit limit 20`)
   ]);
 
-  return c.json({ widgets });
+  return c.json({ stats, widgets });
 }

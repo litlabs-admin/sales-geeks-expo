@@ -206,6 +206,9 @@ type LiveStats = {
   verified: number;
   total_scans: number;
   rewards_redeemed: number;
+  total_connections: number;
+  connections_last_hour: number;
+  connections_last_5m: number;
   health: "healthy" | "degraded" | "unknown";
 };
 
@@ -215,8 +218,40 @@ const MOCK_LIVE: LiveStats = {
   verified: 198,
   total_scans: 1034,
   rewards_redeemed: 72,
+  total_connections: 412,
+  connections_last_hour: 38,
+  connections_last_5m: 7,
   health: "healthy",
 };
+
+// ── Timed leaderboard blocks ──────────────────────────────────────────────────
+type BlockRow = {
+  key: string;
+  label: string;
+  starts_at: string;
+  ends_at: string;
+  status: "pending" | "active" | "ended";
+  seconds_until_start: number;
+  seconds_until_end: number;
+  winner: { alias: string | null; competition_score: number; locked_at: string } | null;
+  live_leader: { alias: string; competition_score: number } | null;
+};
+
+function fmtBlockHM(iso: string) {
+  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtCountdownLarge(seconds: number) {
+  if (seconds <= 0) return "0s";
+  const days = Math.floor(seconds / 86400);
+  if (days >= 1) return `${days}d ${Math.floor((seconds % 86400) / 3600)}h`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
+}
 
 function SendConnectionEmailsAction({ eventId }: { eventId: string }) {
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
@@ -311,6 +346,136 @@ function StatCard({ label, value, sub, hero = false }: {
   );
 }
 
+function OpsBlockCard({ block, tick }: { block: BlockRow; tick: number }) {
+  // Re-derive countdown locally each second so TV viewers see it tick down
+  // smoothly without waiting for the 15s server refresh.
+  const startMs = new Date(block.starts_at).getTime();
+  const endMs = new Date(block.ends_at).getTime();
+  const nowMs = Date.now();
+  const liveSecsToStart = Math.max(0, Math.floor((startMs - nowMs) / 1000));
+  const liveSecsToEnd   = Math.max(0, Math.floor((endMs - nowMs) / 1000));
+  void tick;
+
+  const isActive  = block.status === "active";
+  const isPending = block.status === "pending";
+  const isEnded   = block.status === "ended";
+
+  return (
+    <div style={{
+      borderRadius: 14, overflow: "hidden",
+      background: isActive ? YLW_TINT : BG,
+      border: isActive ? `1.5px solid ${YLW}` : `1px solid ${BORDER}`,
+      boxShadow: isActive ? "0 8px 28px rgba(255,208,0,0.20), 0 2px 6px rgba(15,18,23,0.04)" : SHADOW_CARD,
+    }}>
+      <div style={{
+        padding: "14px 18px 12px",
+        background: isActive ? "transparent" : BG_SOFT,
+        borderBottom: `1px solid ${BORDER}`,
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+      }}>
+        <div>
+          <p style={{ color: INK, fontSize: 16, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>{block.label}</p>
+          <p style={{ color: INK_MUTED, fontSize: 13, margin: "3px 0 0", fontWeight: 600 }}>
+            {fmtBlockHM(block.starts_at)} – {fmtBlockHM(block.ends_at)}
+          </p>
+        </div>
+        <span style={{
+          display: "inline-flex", alignItems: "center", gap: 6,
+          padding: "5px 12px", borderRadius: 999,
+          background: isActive ? INK : isPending ? BG : "#10b98115",
+          color: isActive ? YLW : isPending ? INK_MUTED : "#047857",
+          fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase",
+          border: isPending ? `1px solid ${BORDER}` : "none",
+        }}>
+          {isActive && <span className="animate-yellow-pulse" style={{ width: 7, height: 7, borderRadius: "50%", background: YLW }} />}
+          {isActive ? "Live" : isPending ? "Soon" : "Locked"}
+        </span>
+      </div>
+
+      <div style={{ padding: "16px 18px 18px" }}>
+        {isActive && (
+          <>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 12 }}>
+              <span style={{ color: INK_MUTED, fontSize: 12, fontWeight: 800, letterSpacing: "0.08em" }}>ENDS IN</span>
+              <span style={{
+                fontFamily: DISP, fontWeight: 800, fontSize: 36, color: INK, lineHeight: 1,
+              }}>
+                {fmtCountdownLarge(liveSecsToEnd)}
+              </span>
+            </div>
+            {block.live_leader ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{
+                  width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
+                  background: YLW, color: INK,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: DISP, fontWeight: 800, fontSize: 22,
+                }}>
+                  {block.live_leader.alias.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ color: INK_LIGHT, fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", margin: 0 }}>CURRENT LEADER</p>
+                  <p style={{ color: INK, fontSize: 18, fontWeight: 800, margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {block.live_leader.alias}
+                  </p>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <p style={{ fontFamily: DISP, fontWeight: 800, fontSize: 28, color: INK, margin: 0, lineHeight: 1 }}>
+                    {block.live_leader.competition_score}
+                  </p>
+                  <p style={{ color: INK_LIGHT, fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", margin: "2px 0 0" }}>PTS</p>
+                </div>
+              </div>
+            ) : (
+              <p style={{ color: INK_MUTED, fontSize: 13 }}>No leader yet</p>
+            )}
+          </>
+        )}
+
+        {isPending && (
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+            <span style={{ color: INK_LIGHT, fontSize: 12, fontWeight: 800, letterSpacing: "0.08em" }}>STARTS IN</span>
+            <span style={{
+              fontFamily: DISP, fontWeight: 800, fontSize: 28, color: INK_MUTED, lineHeight: 1,
+            }}>
+              {fmtCountdownLarge(liveSecsToStart)}
+            </span>
+          </div>
+        )}
+
+        {isEnded && (
+          block.winner && block.winner.alias ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{
+                width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
+                background: YLW, color: INK,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 26,
+              }}>
+                🏆
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ color: INK_LIGHT, fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", margin: 0 }}>BLOCK WINNER</p>
+                <p style={{ color: INK, fontSize: 18, fontWeight: 800, margin: "2px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {block.winner.alias}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ fontFamily: DISP, fontWeight: 800, fontSize: 28, color: INK, margin: 0, lineHeight: 1 }}>
+                  {block.winner.competition_score}
+                </p>
+                <p style={{ color: INK_LIGHT, fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", margin: "2px 0 0" }}>PTS</p>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: INK_MUTED, fontSize: 13 }}>No entries scored.</p>
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ChartCard({ title, sub, children }: { title: string; sub?: string; children: React.ReactNode }) {
   return (
     <div style={{
@@ -330,9 +495,11 @@ function ChartCard({ title, sub, children }: { title: string; sub?: string; chil
 export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
   const [eventId, setEventId] = useState(events[0]?.id ?? "");
   const [live, setLive] = useState<LiveStats>(MOCK_LIVE);
+  const [blocks, setBlocks] = useState<BlockRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastRefresh, setLastRefresh] = useState("");
   const [status, setStatus] = useState("");
+  const [tick, setTick] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!eventId) return;
@@ -343,12 +510,19 @@ export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
       const token = session.session?.access_token;
       if (!token) throw new Error("Session expired.");
 
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/ops?event_id=${eventId}`,
-        { headers: { authorization: `Bearer ${token}` }, cache: "no-store" }
-      );
-      const payload = await res.json() as { stats?: LiveStats; error?: string };
-      if (res.ok && payload.stats) setLive(payload.stats);
+      const headers = { authorization: `Bearer ${token}` };
+      const [opsRes, blocksRes] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/ops?event_id=${eventId}`, { headers, cache: "no-store" }),
+        fetch(`/api/leaderboard/blocks?event_id=${eventId}`, { headers, cache: "no-store" })
+      ]);
+      const opsPayload = await opsRes.json() as { stats?: LiveStats; error?: string };
+      if (opsRes.ok && opsPayload.stats) setLive(opsPayload.stats);
+
+      if (blocksRes.ok) {
+        const blocksPayload = await blocksRes.json() as { blocks: BlockRow[] };
+        setBlocks(blocksPayload.blocks ?? []);
+      }
+
       setLastRefresh(new Date().toLocaleTimeString());
       setStatus("");
     } catch {
@@ -362,7 +536,9 @@ export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
   useEffect(() => {
     void refresh();
     const t = window.setInterval(() => void refresh(), 15_000);
-    return () => clearInterval(t);
+    // Local 1s tick so the block countdown decrements between server refreshes
+    const ticker = window.setInterval(() => setTick(x => x + 1), 1000);
+    return () => { clearInterval(t); clearInterval(ticker); };
   }, [refresh]);
 
   const checkinPct = live.total_attendees > 0
@@ -436,14 +612,24 @@ export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
         </div>
       )}
 
-      {/* Live stat cards — TV-optimised: hero card uses INK + YLW */}
+      {/* Live stat cards — TV-optimised: hero cards use INK + YLW */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
         <StatCard label="Registered"   value={live.total_attendees}     sub="total attendees" hero />
+        <StatCard label="Connections"  value={live.total_connections}   sub={`+${live.connections_last_hour} in last hour`} hero />
         <StatCard label="Checked In"   value={live.checked_in}          sub={`${checkinPct}% of registered`} />
         <StatCard label="OTP Verified" value={live.verified}            sub={`${verifiedPct}% verified`} />
         <StatCard label="QR Scans"     value={live.total_scans}         sub="all-time across QRs" />
         <StatCard label="Rewards Out"  value={live.rewards_redeemed}    sub="redemptions today" />
       </div>
+
+      {/* Timed leaderboard blocks — projected on TV during the day */}
+      {blocks.length > 0 && (
+        <ChartCard title="Timed Leaderboard Blocks" sub="Three 2-hour blocks · winner locked at the end of each">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+            {blocks.map((b) => <OpsBlockCard key={b.key} block={b} tick={tick} />)}
+          </div>
+        </ChartCard>
+      )}
 
       {/* Check-in progress bar */}
       <div style={{
