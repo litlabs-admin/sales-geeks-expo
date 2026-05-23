@@ -1,4 +1,14 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('turbo.json','utf8'\\)\\); console.log\\('turbo.json valid JSON'\\)\")",
+      "Bash(node -e \"import\\('./apps/web/next.config.mjs'\\).then\\(\\(\\)=>console.log\\('next.config.mjs loads OK'\\)\\).catch\\(e=>{console.log\\('next.config ERROR',e.message\\);process.exit\\(1\\)}\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git branch *)"
+    ]
+  },
   "enabledPlugins": {
     "ui-ux-pro-max@ui-ux-pro-max-skill": true
   }
