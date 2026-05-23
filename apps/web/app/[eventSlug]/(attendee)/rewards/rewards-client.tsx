@@ -13,13 +13,25 @@ type Reward = {
 
 type RedeemState = "idle" | "confirm" | "redeeming" | "success" | "error";
 
-const YLW = "#FFD000";
-const BLK = "#17191d";
-const DARK = "#1e2028";
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const YLW_TINT      = "#FFFBE5";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_MUTED     = "#4B5563";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BG_SOFT       = "#F5F5F7";
+const BORDER        = "#E5E7EB";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
+const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
 
 /* ── Confetti particle (pure CSS, no heavy lib) ── */
 function ConfettiParticle({ i }: { i: number }) {
-  const colors = [YLW, "#fff", "#ffec60", "#ffe000", "#ffd000"];
+  const colors = [YLW, "#ffec60", "#ffe000", "#ffd000", INK];
   const left = 30 + (i * 23) % 40;
   const delay = (i * 80) % 400;
   return (
@@ -36,13 +48,13 @@ function ConfettiParticle({ i }: { i: number }) {
 /* ── Star / Crown for William ── */
 function IconCrown() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill={YLW} stroke={YLW} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill={INK} stroke={INK} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><line x1="5" x2="19" y1="20" y2="20"/>
     </svg>
   );
 }
 
-function IconGift({ color = "#a8abbe" }: { color?: string }) {
+function IconGift({ color = INK_LIGHT }: { color?: string }) {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 12 20 22 4 22 4 12"/><rect width="20" height="5" x="2" y="7"/>
@@ -122,10 +134,10 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
       style={{
         borderRadius: 14,
         border: isPremium
-          ? `1px solid rgba(255,208,0,0.4)`
-          : canRedeem ? "1px solid #2d3040" : "1px solid #222",
-        background: isPremium ? "linear-gradient(145deg, #1a1500, #111000)" : DARK,
-        boxShadow: isPremium ? "0 0 40px rgba(255,208,0,0.07)" : "none",
+          ? `1px solid ${YLW}`
+          : canRedeem ? `1px solid ${BORDER_STRONG}` : `1px solid ${BORDER}`,
+        background: isPremium ? YLW_TINT : BG,
+        boxShadow: isPremium ? "0 6px 24px rgba(255,208,0,0.18), 0 2px 6px rgba(15,18,23,0.06)" : SHADOW_CARD,
         opacity: visible ? 1 : 0,
         transform: visible ? "none" : "translateY(16px)",
         transition: "opacity 320ms ease, transform 320ms ease",
@@ -145,13 +157,13 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
           <div style={{ flex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
               {isPremium && <IconCrown />}
-              <span style={{ color: "white", fontWeight: 700, fontSize: 14 }}>{reward.name}</span>
+              <span style={{ color: INK, fontWeight: 700, fontSize: 14 }}>{reward.name}</span>
             </div>
 
             {isPremium ? (
-              <span style={{ color: "#9294a8", fontSize: 11 }}>Booking required · Limited slots</span>
+              <span style={{ color: INK_MUTED, fontSize: 11 }}>Booking required · Limited slots</span>
             ) : (
-              <span style={{ color: lowStock ? "#f59e0b" : "#8b8fa8", fontSize: 11 }}>
+              <span style={{ color: lowStock ? "#f59e0b" : INK_LIGHT, fontSize: 11 }}>
                 {lowStock ? `⚡ ${reward.inventory} left` : `${reward.inventory} available`}
               </span>
             )}
@@ -160,16 +172,16 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
           {/* Cost badge */}
           <div style={{
             flexShrink: 0, textAlign: "center",
-            background: affordable ? "rgba(255,208,0,0.12)" : "#242636",
-            border: affordable ? `1px solid rgba(255,208,0,0.25)` : "1px solid #282b3a",
+            background: affordable ? INK : BG_SOFT,
+            border: affordable ? "none" : `1px solid ${BORDER}`,
             borderRadius: 8, padding: "6px 12px",
           }}>
             <div style={{
               fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
               fontWeight: 800, fontSize: 22,
-              color: affordable ? YLW : "#787b8f",
+              color: affordable ? YLW : INK_LIGHT,
             }}>{reward.cost}</div>
-            <div style={{ color: "#8b8fa8", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}>PTS</div>
+            <div style={{ color: affordable ? "rgba(255,208,0,0.7)" : INK_LIGHT, fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}>PTS</div>
           </div>
         </div>
 
@@ -177,16 +189,16 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
         {!affordable && need > 0 && (
           <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 6 }}>
             <div style={{
-              flex: 1, height: 3, borderRadius: 2, background: "#242636", overflow: "hidden",
+              flex: 1, height: 3, borderRadius: 2, background: BG_SOFT, overflow: "hidden", border: `1px solid ${BORDER}`,
             }}>
               <div style={{
                 height: "100%", borderRadius: 2,
-                background: `linear-gradient(90deg, #333, #444)`,
+                background: INK_LIGHT,
                 width: `${Math.min(100, (balance / reward.cost) * 100)}%`,
                 transition: "width 600ms ease",
               }} />
             </div>
-            <span style={{ color: "#787b8f", fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>
+            <span style={{ color: INK_LIGHT, fontSize: 10, fontWeight: 600, whiteSpace: "nowrap" }}>
               need {need} more
             </span>
           </div>
@@ -198,18 +210,18 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
             <div style={{
               display: "flex", alignItems: "center", gap: 8,
               padding: "10px 14px", borderRadius: 8,
-              background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)",
+              background: "#ecfdf5", border: "1px solid #a7f3d0",
             }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12"/>
               </svg>
-              <span style={{ color: "#10b981", fontSize: 12, fontWeight: 700 }}>Redeemed!</span>
+              <span style={{ color: "#047857", fontSize: 12, fontWeight: 700 }}>Redeemed!</span>
             </div>
           ) : state === "error" ? (
             <div style={{
               padding: "10px 14px", borderRadius: 8,
-              background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-              color: "#ef4444", fontSize: 12, fontWeight: 500,
+              background: "#fff0f0", border: "1px solid #fca5a5",
+              color: "#dc2626", fontSize: 12, fontWeight: 500,
             }}>
               {errMsg}
             </div>
@@ -218,17 +230,19 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
               <button onClick={doRedeem}
                 style={{
                   flex: 1, padding: "10px 0", borderRadius: 8,
-                  background: YLW, color: BLK,
+                  background: YLW, color: INK,
                   fontWeight: 800, fontSize: 13, border: "none", cursor: "pointer",
-                  letterSpacing: "0.02em",
+                  letterSpacing: "0.02em", fontFamily: "inherit",
+                  boxShadow: SHADOW_YLW,
                 }}>
                 Confirm
               </button>
               <button onClick={() => setState("idle")}
                 style={{
                   padding: "10px 16px", borderRadius: 8,
-                  background: "#242636", color: "#9294a8",
-                  fontWeight: 600, fontSize: 12, border: "1px solid #2d3040", cursor: "pointer",
+                  background: BG_SOFT, color: INK_MUTED,
+                  fontWeight: 600, fontSize: 12, border: `1px solid ${BORDER}`, cursor: "pointer",
+                  fontFamily: "inherit",
                 }}>
                 Cancel
               </button>
@@ -237,14 +251,13 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
             <button onClick={() => setState("confirm")} disabled={state === "redeeming"}
               style={{
                 width: "100%", padding: "11px 0", borderRadius: 8,
-                background: "rgba(255,208,0,0.1)", border: `1px solid rgba(255,208,0,0.3)`,
-                color: YLW, fontWeight: 700, fontSize: 13,
+                background: YLW, border: "none",
+                color: INK, fontWeight: 800, fontSize: 13,
                 cursor: "pointer", letterSpacing: "0.02em",
                 display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-                transition: "background 150ms",
+                transition: "background 150ms", fontFamily: "inherit",
+                boxShadow: SHADOW_YLW,
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,208,0,0.18)")}
-              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,208,0,0.1)")}
             >
               {state === "redeeming" ? (
                 <>
@@ -258,8 +271,8 @@ function RewardCard({ reward, balance, token, eventId, onRedeemed }: {
             </button>
           ) : (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ color: "#686a7d" }}><IconLock /></span>
-              <span style={{ color: "#787b8f", fontSize: 12 }}>
+              <span style={{ color: INK_LIGHT }}><IconLock /></span>
+              <span style={{ color: INK_LIGHT, fontSize: 12 }}>
                 {inStock ? `Earn ${need} more points to unlock` : "Out of stock"}
               </span>
             </div>
@@ -307,11 +320,11 @@ export function RewardsClient({ eventId }: { eventId: string }) {
 
   if (loading) {
     return (
-      <div style={{ background: BLK, minHeight: "100dvh", padding: "0 16px 120px" }}>
+      <div style={{ background: BG, minHeight: "100dvh", padding: "0 16px 120px" }}>
         <div style={{ padding: "32px 0 20px" }}>
-          <div className="skeleton-dark" style={{ height: 80, borderRadius: 14, marginBottom: 16 }} />
+          <div style={{ height: 80, borderRadius: 14, marginBottom: 16, background: BG_SOFT, animation: "shimmer 1.4s ease-in-out infinite" }} />
           {[1, 2, 3].map(i => (
-            <div key={i} className="skeleton-dark" style={{ height: 100, borderRadius: 14, marginBottom: 12 }} />
+            <div key={i} style={{ height: 100, borderRadius: 14, marginBottom: 12, background: BG_SOFT, animation: "shimmer 1.4s ease-in-out infinite" }} />
           ))}
         </div>
       </div>
@@ -319,14 +332,14 @@ export function RewardsClient({ eventId }: { eventId: string }) {
   }
 
   return (
-    <div style={{ background: BLK, minHeight: "100dvh" }}>
+    <div style={{ background: BG, minHeight: "100dvh" }}>
 
-      {/* Header */}
+      {/* Header — dark hero band */}
       <div className="px-5 pb-6 pt-8 relative overflow-hidden"
-        style={{ background: "linear-gradient(160deg, #1e2028 0%, #111 60%)" }}>
-        <div className="pointer-events-none absolute inset-0 opacity-[0.05]" aria-hidden
+        style={{ background: INK }}>
+        <div className="pointer-events-none absolute inset-0 opacity-[0.06]" aria-hidden
           style={{ backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`, backgroundSize: "40px 40px" }} />
-        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,208,0,0.9)" }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: YLW }}>
           Event App
         </p>
         <h1 style={{
@@ -338,14 +351,15 @@ export function RewardsClient({ eventId }: { eventId: string }) {
         {balance !== null && (
           <div style={{
             marginTop: 16, display: "inline-flex", alignItems: "baseline", gap: 6,
-            background: "rgba(255,208,0,0.08)", border: "1px solid rgba(255,208,0,0.2)",
+            background: YLW, border: "none",
             borderRadius: 10, padding: "8px 16px",
+            boxShadow: SHADOW_YLW,
           }}>
             <span style={{
               fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
-              fontWeight: 800, fontSize: 32, color: YLW, lineHeight: 1,
+              fontWeight: 800, fontSize: 32, color: INK, lineHeight: 1,
             }}>{balance}</span>
-            <span style={{ color: "rgba(255,208,0,0.9)", fontSize: 11, fontWeight: 700, letterSpacing: "0.08em" }}>
+            <span style={{ color: INK, fontSize: 11, fontWeight: 700, letterSpacing: "0.08em" }}>
               PTS AVAILABLE
             </span>
           </div>
@@ -357,12 +371,13 @@ export function RewardsClient({ eventId }: { eventId: string }) {
         {rewards.length === 0 ? (
           <div style={{
             textAlign: "center", padding: "64px 24px",
-            background: "#1e2028", borderRadius: 16, border: "1px solid #222",
+            background: BG, borderRadius: 16, border: `1px solid ${BORDER}`,
+            boxShadow: SHADOW_CARD,
           }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#242636", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-              <IconGift color="#787b8f" />
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: BG_SOFT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", border: `1px solid ${BORDER}` }}>
+              <IconGift color={INK_LIGHT} />
             </div>
-            <p style={{ color: "#8b8fa8", fontSize: 14 }}>Rewards will appear here once published</p>
+            <p style={{ color: INK_LIGHT, fontSize: 14 }}>Rewards will appear here once published</p>
           </div>
         ) : (
           rewards.map(reward => (
@@ -378,7 +393,10 @@ export function RewardsClient({ eventId }: { eventId: string }) {
         )}
       </div>
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+      `}</style>
     </div>
   );
 }

@@ -3,6 +3,12 @@ import AdminExportsClient from "./exports-client";
 
 type EventSummary = { id: string; name: string };
 
+/* ── Light theme palette ── */
+const YLW       = "#FFD000";
+const INK       = "#0A0E14";
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
+const DISP = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
+
 export default async function AdminExportsPage() {
   const supabase = createServerSupabaseClient();
   const { data: events, error } = await supabase
@@ -13,11 +19,24 @@ export default async function AdminExportsPage() {
   if (error) throw new Error(error.message);
 
   return (
-    <div className="max-w-3xl">
-      <div style={{ marginBottom: 28 }}>
-        <p style={{ color: "#FFD000", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>ADMIN</p>
-        <h1 style={{ color: "white", fontSize: 26, fontWeight: 900, margin: "4px 0 0", letterSpacing: "-0.02em" }}>Exports</h1>
-        <p style={{ color: "#8b8fa8", fontSize: 13, marginTop: 4 }}>Generate CSV exports with full audit records for any event dataset.</p>
+    <div className="max-w-4xl">
+      <div style={{
+        background: INK, borderRadius: 16, padding: "28px 32px", marginBottom: 28,
+        position: "relative", overflow: "hidden",
+        boxShadow: SHADOW_LIFT,
+      }}>
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.06,
+          backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`,
+          backgroundSize: "40px 40px",
+        }} />
+        <p style={{ color: YLW, fontSize: 12, fontWeight: 800, letterSpacing: "0.14em", margin: 0, position: "relative" }}>ADMIN</p>
+        <h1 style={{ fontFamily: DISP, color: "white", fontSize: 40, fontWeight: 800, margin: "6px 0 0", letterSpacing: "-0.01em", lineHeight: 1, position: "relative" }}>
+          Exports
+        </h1>
+        <p style={{ color: "rgba(255,255,255,0.78)", fontSize: 16, marginTop: 8, position: "relative" }}>
+          Generate CSV exports with full audit records for any event dataset.
+        </p>
       </div>
       <AdminExportsClient events={(events ?? []) as EventSummary[]} />
     </div>

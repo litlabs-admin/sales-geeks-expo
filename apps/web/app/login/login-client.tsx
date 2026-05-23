@@ -8,6 +8,18 @@ type LoginClientProps = {
   defaultNext: string;
 };
 
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BORDER        = "#E5E7EB";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
+
 function normalizedEmail(value: string) {
   return value.trim().toLowerCase();
 }
@@ -64,20 +76,35 @@ export default function LoginClient({ mode, defaultNext }: LoginClientProps) {
   }
 
   return (
-    <div className="mt-6 rounded-md border border-slate-200 bg-white p-4">
-      {status ? <p className="text-sm text-slate-700">{status}</p> : null}
-      {sentTo ? <p className="mt-2 text-xs text-slate-500">Sent to {sentTo}</p> : null}
+    <div
+      className="mt-6 rounded-xl p-4"
+      style={{ background: BG, border: `1px solid ${BORDER}`, boxShadow: SHADOW_CARD }}
+    >
+      {status ? <p style={{ fontSize: 13, color: INK_BODY, margin: 0 }}>{status}</p> : null}
+      {sentTo ? <p style={{ marginTop: 6, fontSize: 11, color: INK_LIGHT }}>Sent to {sentTo}</p> : null}
       <form className="mt-4 grid gap-3" onSubmit={requestMagicLink}>
         <input
           autoComplete="email"
-          className="rounded-md border border-slate-300 px-3 py-2 text-base"
           onChange={(event) => setEmail(event.target.value)}
           placeholder="you@example.com"
           required
           type="email"
           value={email}
+          style={{
+            width: "100%", background: BG, border: `1.5px solid ${BORDER_STRONG}`, borderRadius: 10,
+            color: INK, fontSize: 15, padding: "10px 12px", outline: "none",
+            fontFamily: "inherit",
+          }}
         />
-        <button className="rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" type="submit">
+        <button
+          type="submit"
+          style={{
+            padding: "12px 16px", borderRadius: 10,
+            background: YLW, color: INK, fontWeight: 800, fontSize: 14,
+            border: "none", cursor: "pointer", letterSpacing: "0.03em",
+            boxShadow: SHADOW_YLW, fontFamily: "inherit",
+          }}
+        >
           Continue
         </button>
       </form>

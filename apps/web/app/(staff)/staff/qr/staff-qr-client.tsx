@@ -4,9 +4,21 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 import QRCode from "qrcode";
 
-const YLW = "#FFD000";
-const DARK = "#1e2028";
-const BORDER = "#242636";
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const YLW_TINT      = "#FFFBE5";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_MUTED     = "#4B5563";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BG_SOFT       = "#F5F5F7";
+const BORDER        = "#E5E7EB";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
+const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
 
 type EventSummary = { id: string; slug: string; name: string };
 
@@ -58,7 +70,7 @@ function CampaignQr({ slug, code, signature }: { slug: string; code: string; sig
       errorCorrectionLevel: "M",
       margin: 2,
       width: 160,
-      color: { dark: "#17191d", light: "#ffffff" },
+      color: { dark: INK, light: "#ffffff" },
     }).then((url) => { if (!cancelled) setDataUrl(url); }).catch(() => {});
     return () => { cancelled = true; };
   }, [path]);
@@ -72,12 +84,12 @@ function CampaignQr({ slug, code, signature }: { slug: string; code: string; sig
       }}>
         {dataUrl
           ? <img src={dataUrl} alt="QR" width={90} height={90} />
-          : <span style={{ fontSize: 10, color: "#787b8f" }}>…</span>
+          : <span style={{ fontSize: 10, color: INK_LIGHT }}>…</span>
         }
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <p style={{ color: "#787b8f", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", margin: 0 }}>SCAN URL</p>
-        <p style={{ color: "#8b8fa8", fontSize: 10, marginTop: 4, wordBreak: "break-all", lineHeight: 1.5 }}>{path}</p>
+        <p style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", margin: 0 }}>SCAN URL</p>
+        <p style={{ color: INK_MUTED, fontSize: 10, marginTop: 4, wordBreak: "break-all", lineHeight: 1.5 }}>{path}</p>
       </div>
     </div>
   );
@@ -85,7 +97,7 @@ function CampaignQr({ slug, code, signature }: { slug: string; code: string; sig
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p style={{ color: "#787b8f", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", margin: "0 0 6px" }}>
+    <p style={{ color: INK_MUTED, fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", margin: "0 0 6px" }}>
       {children}
     </p>
   );
@@ -93,9 +105,10 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 
 const inputStyle: React.CSSProperties = {
   width: "100%", boxSizing: "border-box",
-  background: "#17191d", border: `1px solid ${BORDER}`,
-  borderRadius: 8, padding: "10px 12px",
-  color: "white", fontSize: 13, outline: "none",
+  background: BG, border: `1.5px solid ${BORDER_STRONG}`,
+  borderRadius: 10, padding: "10px 12px",
+  color: INK, fontSize: 13, outline: "none",
+  fontFamily: "inherit",
 };
 
 export default function StaffQrClient({ events }: { events: EventSummary[] }) {
@@ -225,7 +238,7 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
           border-top: 1px solid ${BORDER};
         }
         .sg-input:focus {
-          border-color: rgba(255,208,0,0.4) !important;
+          border-color: ${INK} !important;
         }
         .sg-toggle-btn:hover:not(:disabled) {
           opacity: 0.85;
@@ -237,13 +250,14 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
 
         {/* ── Create form ── */}
         <form onSubmit={createCampaign} style={{
-          background: DARK, border: `1px solid ${BORDER}`,
+          background: BG, border: `1px solid ${BORDER}`,
           borderRadius: 16, overflow: "hidden",
           display: "flex", flexDirection: "column",
+          boxShadow: SHADOW_CARD,
         }}>
           <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}` }}>
-            <p style={{ color: "white", fontSize: 14, fontWeight: 700, margin: 0 }}>Create QR Campaign</p>
-            <p style={{ color: "#787b8f", fontSize: 11, margin: "2px 0 0" }}>New codes go live immediately when activated</p>
+            <p style={{ color: INK, fontSize: 14, fontWeight: 700, margin: 0 }}>Create QR Campaign</p>
+            <p style={{ color: INK_LIGHT, fontSize: 11, margin: "2px 0 0" }}>New codes go live immediately when activated</p>
           </div>
 
           <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 14, flex: 1 }}>
@@ -284,16 +298,16 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
             </div>
 
             <div>
-              <FieldLabel>ZONE HINT <span style={{ color: "#686a7d", fontWeight: 500 }}>(optional)</span></FieldLabel>
+              <FieldLabel>ZONE HINT <span style={{ color: INK_LIGHT, fontWeight: 500 }}>(optional)</span></FieldLabel>
               <input className="sg-input" style={inputStyle} name="zone_hint" placeholder="e.g. Main Hall North" />
             </div>
 
             {status && (
               <div style={{
                 borderRadius: 8, padding: "9px 13px", fontSize: 12, fontWeight: 600,
-                background: statusKind === "ok" ? "rgba(16,185,129,0.08)" : "rgba(239,68,68,0.08)",
-                border: `1px solid ${statusKind === "ok" ? "rgba(16,185,129,0.25)" : "rgba(239,68,68,0.25)"}`,
-                color: statusKind === "ok" ? "#10b981" : "#f87171",
+                background: statusKind === "ok" ? "#ecfdf5" : "#fff0f0",
+                border: `1px solid ${statusKind === "ok" ? "#a7f3d0" : "#fca5a5"}`,
+                color: statusKind === "ok" ? "#047857" : "#dc2626",
               }}>
                 {status}
               </div>
@@ -307,12 +321,14 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
               style={{
                 width: "100%", padding: "12px 0",
                 borderRadius: 10, border: "none",
-                background: busy || !selectedEvent ? "#282b3a" : YLW,
-                color: busy || !selectedEvent ? "#686a7d" : "#17191d",
+                background: busy || !selectedEvent ? BG_SOFT : YLW,
+                color: busy || !selectedEvent ? INK_LIGHT : INK,
                 fontWeight: 800, fontSize: 13,
                 cursor: busy || !selectedEvent ? "default" : "pointer",
                 letterSpacing: "0.04em", transition: "all 150ms",
                 touchAction: "manipulation",
+                boxShadow: busy || !selectedEvent ? "none" : SHADOW_YLW,
+                fontFamily: "inherit",
               }}>
               {busy ? "Creating…" : "Create QR Campaign"}
             </button>
@@ -324,15 +340,16 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
 
           {/* Header */}
           <div style={{
-            background: DARK, border: `1px solid ${BORDER}`, borderRadius: 12,
+            background: BG, border: `1px solid ${BORDER}`, borderRadius: 12,
             padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between",
+            boxShadow: SHADOW_CARD,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <p style={{ color: "white", fontSize: 14, fontWeight: 700, margin: 0 }}>Live Campaigns</p>
+              <p style={{ color: INK, fontSize: 14, fontWeight: 700, margin: 0 }}>Live Campaigns</p>
               <span style={{
                 fontFamily: "'Barlow Condensed', sans-serif", fontWeight: 800, fontSize: 16,
-                color: YLW, background: "rgba(255,208,0,0.1)", borderRadius: 6,
-                padding: "1px 10px", border: "1px solid rgba(255,208,0,0.2)",
+                color: INK, background: YLW, borderRadius: 6,
+                padding: "1px 10px",
               }}>
                 {active.length}
               </span>
@@ -342,10 +359,11 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
               style={{
                 display: "flex", alignItems: "center", gap: 6,
                 padding: "8px 14px", borderRadius: 8,
-                background: "#17191d", border: `1px solid ${BORDER}`,
-                color: loading ? YLW : "#9294a8", fontSize: 11, fontWeight: 700,
+                background: BG_SOFT, border: `1px solid ${BORDER}`,
+                color: loading ? INK : INK_MUTED, fontSize: 11, fontWeight: 700,
                 cursor: loading ? "default" : "pointer", transition: "color 150ms",
                 touchAction: "manipulation",
+                fontFamily: "inherit",
               }}>
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
                 strokeLinecap="round" strokeLinejoin="round"
@@ -360,33 +378,34 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
 
           {campaigns.length === 0 && !loading && (
             <div style={{
-              background: DARK, border: `1px solid ${BORDER}`, borderRadius: 14,
+              background: BG, border: `1px solid ${BORDER}`, borderRadius: 14,
               padding: "40px 24px", textAlign: "center",
+              boxShadow: SHADOW_CARD,
             }}>
-              <p style={{ color: "#8b8fa8", fontSize: 13 }}>No QR campaigns yet. Create one to get started.</p>
+              <p style={{ color: INK_LIGHT, fontSize: 13 }}>No QR campaigns yet. Create one to get started.</p>
             </div>
           )}
 
           {[...active, ...inactive].map((campaign) => {
-            const typeColor = typeColors[campaign.type] ?? "#8b8fa8";
+            const typeColor = typeColors[campaign.type] ?? INK_LIGHT;
             return (
               <article key={campaign.id} style={{
-                background: DARK,
-                border: `1px solid ${campaign.active ? "rgba(255,208,0,0.15)" : BORDER}`,
+                background: campaign.active ? YLW_TINT : BG,
+                border: `1px solid ${campaign.active ? YLW : BORDER}`,
                 borderRadius: 14, overflow: "hidden",
-                boxShadow: campaign.active ? "0 0 20px rgba(255,208,0,0.04)" : "none",
+                boxShadow: campaign.active ? SHADOW_LIFT : SHADOW_CARD,
               }}>
                 {/* Card header */}
-                <div style={{ padding: "14px 16px", borderBottom: `1px solid ${BORDER}` }}>
+                <div style={{ padding: "14px 16px", borderBottom: `1px solid ${campaign.active ? YLW : BORDER}` }}>
                   <div className="sg-campaign-header">
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <span style={{
                           width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
-                          background: campaign.active ? "#10b981" : "#686a7d",
+                          background: campaign.active ? "#10b981" : "#9CA3AF",
                           boxShadow: campaign.active ? "0 0 0 3px rgba(16,185,129,0.2)" : "none",
                         }} />
-                        <h3 style={{ color: "white", fontWeight: 700, fontSize: 14, margin: 0 }}>
+                        <h3 style={{ color: INK, fontWeight: 700, fontSize: 14, margin: 0 }}>
                           {campaign.campaign_name ?? campaign.type}
                         </h3>
                       </div>
@@ -394,17 +413,17 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
                         <span style={{
                           fontSize: 10, fontWeight: 700, padding: "3px 9px",
                           borderRadius: 5, background: `${typeColor}18`,
-                          border: `1px solid ${typeColor}35`, color: typeColor,
+                          border: `1px solid ${typeColor}45`, color: typeColor,
                         }}>
                           {campaign.type.replace(/_/g, " ")}
                         </span>
                         <span style={{
-                          color: YLW, fontSize: 12, fontWeight: 800,
+                          color: INK, fontSize: 12, fontWeight: 800,
                           fontFamily: "'Barlow Condensed', sans-serif",
                         }}>
                           {campaign.points} pts
                         </span>
-                        <span style={{ color: campaign.active ? "#10b981" : "#686a7d", fontSize: 11, fontWeight: 600 }}>
+                        <span style={{ color: campaign.active ? "#047857" : INK_LIGHT, fontSize: 11, fontWeight: 600 }}>
                           {campaign.active ? "active" : "inactive"}
                         </span>
                       </div>
@@ -419,12 +438,13 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
                         flexShrink: 0, padding: "9px 16px", borderRadius: 8,
                         fontSize: 12, fontWeight: 700,
                         cursor: busy ? "default" : "pointer", transition: "all 150ms",
-                        background: campaign.active ? "rgba(239,68,68,0.1)" : "rgba(16,185,129,0.1)",
-                        border: `1px solid ${campaign.active ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)"}`,
-                        color: campaign.active ? "#f87171" : "#10b981",
+                        background: campaign.active ? "#fff0f0" : "#ecfdf5",
+                        border: `1px solid ${campaign.active ? "#fca5a5" : "#a7f3d0"}`,
+                        color: campaign.active ? "#dc2626" : "#047857",
                         opacity: busy ? 0.5 : 1,
                         touchAction: "manipulation",
                         whiteSpace: "nowrap",
+                        fontFamily: "inherit",
                       }}>
                       {campaign.active ? "Deactivate" : "Activate"}
                     </button>
@@ -442,13 +462,13 @@ export default function StaffQrClient({ events }: { events: EventSummary[] }) {
                       { label: "UNIQUE ATTENDEES", value: campaign.unique_attendees ?? 0 },
                     ].map(({ label, value }) => (
                       <div key={label} style={{
-                        background: "#17191d", border: `1px solid ${BORDER}`,
+                        background: BG, border: `1px solid ${BORDER}`,
                         borderRadius: 8, padding: "10px 12px",
                       }}>
-                        <p style={{ color: "#787b8f", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", margin: 0 }}>{label}</p>
+                        <p style={{ color: INK_LIGHT, fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", margin: 0 }}>{label}</p>
                         <p style={{
                           fontFamily: "'Barlow Condensed', sans-serif",
-                          fontWeight: 800, fontSize: 22, color: "white", margin: "2px 0 0", lineHeight: 1,
+                          fontWeight: 800, fontSize: 22, color: INK, margin: "2px 0 0", lineHeight: 1,
                         }}>{value}</p>
                       </div>
                     ))}

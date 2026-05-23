@@ -10,15 +10,20 @@ type Geek = {
   is_william: boolean;
 };
 
-const YLW = "#FFD000";
-const BLK = "#17191d";
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const YLW_TINT      = "#FFFBE5";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_MUTED     = "#4B5563";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BG_SOFT       = "#F5F5F7";
+const BORDER        = "#E5E7EB";
 
-/* ── Avatar colours keyed by name initial ── */
-const AVATAR_COLORS = ["#1a2a1a", "#1a1a2a", "#2a1a1a", "#1a2a2a", "#2a1a2a"];
-function avatarColor(name: string) {
-  const i = name.charCodeAt(0) % AVATAR_COLORS.length;
-  return AVATAR_COLORS[i];
-}
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
+const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
 
 /* ── External link icon ── */
 function IconExternal() {
@@ -31,9 +36,9 @@ function IconExternal() {
 }
 
 /* ── Star / Crown for William ── */
-function IconCrown() {
+function IconCrown({ color = INK }: { color?: string }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill={YLW} stroke={YLW} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
       <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><line x1="5" x2="19" y1="20" y2="20"/>
     </svg>
   );
@@ -79,11 +84,9 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
         transform: visible ? "translateY(0)" : "translateY(20px)",
         transition: `opacity 350ms ease ${delay}ms, transform 350ms ease ${delay}ms`,
         borderRadius: 16,
-        border: isWilliam ? `1px solid rgba(255,208,0,0.4)` : "1px solid #222",
-        background: isWilliam
-          ? "linear-gradient(145deg, #1a1500 0%, #111000 100%)"
-          : "#1e2028",
-        boxShadow: isWilliam ? `0 0 40px rgba(255,208,0,0.07)` : "none",
+        border: isWilliam ? `1px solid ${YLW}` : `1px solid ${BORDER}`,
+        background: isWilliam ? YLW_TINT : BG,
+        boxShadow: isWilliam ? "0 6px 24px rgba(255,208,0,0.20), 0 2px 6px rgba(15,18,23,0.06)" : SHADOW_CARD,
         overflow: "hidden",
       }}>
 
@@ -95,19 +98,19 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
           width: "100%", padding: "16px 16px 14px",
           background: "none", border: "none", cursor: "pointer",
           touchAction: "manipulation",
+          fontFamily: "inherit",
         }}>
         {/* Avatar */}
         <div style={{
           width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
-          background: isWilliam ? "linear-gradient(135deg, #2a1f00, #1a1400)" : avatarColor(geek.name),
-          border: isWilliam ? `2px solid rgba(255,208,0,0.5)` : "2px solid #282b3a",
+          background: isWilliam ? INK : BG_SOFT,
+          border: isWilliam ? `2px solid ${YLW}` : `2px solid ${BORDER}`,
           display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: isWilliam ? `0 0 16px rgba(255,208,0,0.15)` : "none",
         }}>
           <span style={{
             fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
             fontWeight: 800, fontSize: 20,
-            color: isWilliam ? YLW : "#b8bace",
+            color: isWilliam ? YLW : INK,
           }}>
             {geek.name.charAt(0).toUpperCase()}
           </span>
@@ -116,16 +119,16 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
         {/* Name + role */}
         <div style={{ flex: 1, textAlign: "left" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: "white", fontWeight: 700, fontSize: 15 }}>{geek.name}</span>
+            <span style={{ color: INK, fontWeight: 700, fontSize: 15 }}>{geek.name}</span>
             {isWilliam && <IconCrown />}
           </div>
-          <span style={{ color: "#8b8fa8", fontSize: 11, fontWeight: 500 }}>
+          <span style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 500 }}>
             {isWilliam ? "Premium Strategy · Host" : "Event Speaker"}
           </span>
         </div>
 
         {/* Chevron */}
-        <span style={{ color: "#787b8f", flexShrink: 0 }}>
+        <span style={{ color: INK_MUTED, flexShrink: 0 }}>
           <IconChevron open={expanded} />
         </span>
       </button>
@@ -133,21 +136,21 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
       {/* Expanded bio */}
       {expanded && (
         <div className="animate-expand-down" style={{ padding: "0 16px 16px" }}>
-          <p style={{ color: "#a8abbe", fontSize: 13, lineHeight: 1.7 }}>{geek.bio}</p>
+          <p style={{ color: INK_BODY, fontSize: 13, lineHeight: 1.7 }}>{geek.bio}</p>
 
           {isWilliam && (
             <div style={{
               marginTop: 12, padding: "12px 14px",
-              background: "rgba(255,208,0,0.07)",
-              borderRadius: 8, border: "1px solid rgba(255,208,0,0.15)",
+              background: BG,
+              borderRadius: 8, border: `1px solid ${YLW}`,
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
                 <IconCrown />
-                <span style={{ color: YLW, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
+                <span style={{ color: INK, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
                   PREMIUM REWARD
                 </span>
               </div>
-              <p style={{ color: "#a8abbe", fontSize: 12, lineHeight: 1.6, margin: 0 }}>
+              <p style={{ color: INK_BODY, fontSize: 12, lineHeight: 1.6, margin: 0 }}>
                 Book a private post-event strategy session. Redeem your points in the Rewards tab to unlock a limited slot.
               </p>
             </div>
@@ -164,14 +167,15 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
               style={{
                 display: "inline-flex", alignItems: "center", gap: 7,
                 marginTop: 12, padding: "10px 16px",
-                background: bookState === "pressed" ? "rgba(255,208,0,0.15)" : "#242636",
-                border: "1px solid #2d3040",
-                borderRadius: 8, color: YLW,
-                fontSize: 12, fontWeight: 700,
+                background: bookState === "pressed" ? "#E6BB00" : YLW,
+                border: "none",
+                borderRadius: 8, color: INK,
+                fontSize: 12, fontWeight: 800,
                 textDecoration: "none", letterSpacing: "0.02em",
                 transform: bookState === "pressed" ? "scale(0.97)" : "scale(1)",
                 transition: "background 150ms, transform 100ms",
                 touchAction: "manipulation",
+                boxShadow: SHADOW_YLW,
               }}>
               Book a chat
               <IconExternal />
@@ -186,14 +190,14 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
 /* ── Main ── */
 export default function GeeksClient({ geeks }: { geeks: Geek[] }) {
   return (
-    <div style={{ background: BLK, minHeight: "100dvh" }}>
+    <div style={{ background: BG, minHeight: "100dvh" }}>
 
-      {/* Header */}
+      {/* Header — dark hero band */}
       <div className="px-5 pb-6 pt-8 relative overflow-hidden"
-        style={{ background: "linear-gradient(160deg, #1e2028 0%, #111 60%)" }}>
-        <div className="pointer-events-none absolute inset-0 opacity-[0.05]" aria-hidden
+        style={{ background: INK }}>
+        <div className="pointer-events-none absolute inset-0 opacity-[0.06]" aria-hidden
           style={{ backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`, backgroundSize: "40px 40px" }} />
-        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "rgba(255,208,0,0.4)" }}>
+        <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: YLW }}>
           Event Team
         </p>
         <h1 style={{
@@ -202,7 +206,7 @@ export default function GeeksClient({ geeks }: { geeks: Geek[] }) {
         }}>
           MEET THE GEEKS
         </h1>
-        <p style={{ color: "#8b8fa8", fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
+        <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 13, marginTop: 8, lineHeight: 1.6 }}>
           Your speakers and hosts for Scottish Growth Expo 2026.
         </p>
       </div>
@@ -212,15 +216,16 @@ export default function GeeksClient({ geeks }: { geeks: Geek[] }) {
         {geeks.length === 0 ? (
           <div style={{
             textAlign: "center", padding: "64px 24px",
-            background: "#1e2028", borderRadius: 16, border: "1px solid #222",
+            background: BG, borderRadius: 16, border: `1px solid ${BORDER}`,
+            boxShadow: SHADOW_CARD,
           }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "#242636", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#787b8f" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: BG_SOFT, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px", border: `1px solid ${BORDER}` }}>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={INK_LIGHT} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
               </svg>
             </div>
-            <p style={{ color: "#8b8fa8", fontSize: 14 }}>Geeks will appear here once published</p>
+            <p style={{ color: INK_LIGHT, fontSize: 14 }}>Geeks will appear here once published</p>
           </div>
         ) : (
           geeks.map((geek, i) => (

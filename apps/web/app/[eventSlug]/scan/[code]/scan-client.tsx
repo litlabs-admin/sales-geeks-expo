@@ -5,6 +5,16 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type ScanState = "checking" | "awarded" | "already_collected" | "not_yet_active" | "signed_out" | "error";
 
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const BG            = "#FFFFFF";
+const BORDER        = "#E5E7EB";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
+
 export function ScanClient({
   code,
   eventId,
@@ -71,11 +81,19 @@ export function ScanClient({
   }, [code, eventId, sig]);
 
   return (
-    <section className="mt-5 rounded-md border border-slate-200 bg-white p-5">
-      <p className="text-sm font-semibold capitalize text-ink">{state.replaceAll("_", " ")}</p>
-      <p className="mt-2 text-sm text-slate-700">{detail}</p>
+    <section className="mt-5 rounded-xl p-5" style={{ background: BG, border: `1px solid ${BORDER}`, boxShadow: SHADOW_CARD }}>
+      <p style={{ fontSize: 14, fontWeight: 700, color: INK, textTransform: "capitalize", margin: 0 }}>{state.replaceAll("_", " ")}</p>
+      <p style={{ marginTop: 8, fontSize: 14, color: INK_BODY }}>{detail}</p>
       {state === "signed_out" ? (
-        <a className="mt-4 inline-flex rounded-md bg-brand px-4 py-2 text-sm font-semibold text-white" href={`/${eventSlug}/join`}>
+        <a
+          className="mt-4 inline-flex"
+          href={`/${eventSlug}/join`}
+          style={{
+            background: YLW, color: INK, fontWeight: 800, fontSize: 13,
+            padding: "10px 18px", borderRadius: 8, textDecoration: "none",
+            boxShadow: SHADOW_YLW, marginTop: 16, display: "inline-flex",
+          }}
+        >
           Join app
         </a>
       ) : null}

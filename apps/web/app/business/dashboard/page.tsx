@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useEffect, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
@@ -28,6 +28,20 @@ type ProfileData = {
   qr: QrInfo;
   eventSlug: string;
 };
+
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const YLW_TINT      = "#FFFBE5";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_MUTED     = "#4B5563";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BG_SOFT       = "#F5F5F7";
+const BORDER        = "#E5E7EB";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
 
 export default function BusinessDashboardPage() {
   const [data, setData] = useState<ProfileData | null>(null);
@@ -80,8 +94,9 @@ export default function BusinessDashboardPage() {
   if (loading) {
     return (
       <div className="space-y-4 animate-fade-in">
-        <div className="skeleton h-32 rounded-2xl" />
-        <div className="skeleton h-48 rounded-2xl" />
+        <div style={{ height: 128, borderRadius: 16, background: BG_SOFT, animation: "shimmer 1.4s ease-in-out infinite" }} />
+        <div style={{ height: 192, borderRadius: 16, background: BG_SOFT, animation: "shimmer 1.4s ease-in-out infinite" }} />
+        <style>{`@keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }`}</style>
       </div>
     );
   }
@@ -91,11 +106,11 @@ export default function BusinessDashboardPage() {
       <div className="space-y-4 animate-slide-up">
         <div
           className="rounded-2xl p-6 text-center"
-          style={{ background: "rgba(255,255,255,0.9)", border: "1px solid rgba(18,110,130,0.1)" }}
+          style={{ background: BG, border: `1px solid ${BORDER}`, boxShadow: SHADOW_CARD }}
         >
-          <p className="text-2xl mb-3">🏢</p>
-          <p className="text-slate-500 text-sm">{error || "No dashboard data."}</p>
-          <Link href="/business/login" className="mt-4 inline-block text-sm font-semibold text-brand hover:underline">
+          <p style={{ fontSize: 28, marginBottom: 12 }}>🏢</p>
+          <p style={{ color: INK_LIGHT, fontSize: 13 }}>{error || "No dashboard data."}</p>
+          <Link href="/business/login" style={{ marginTop: 16, display: "inline-block", fontSize: 13, fontWeight: 700, color: INK, textDecoration: "underline" }}>
             Sign in again →
           </Link>
         </div>
@@ -106,32 +121,32 @@ export default function BusinessDashboardPage() {
   const { business, qr, eventSlug } = data;
   const hasQr = qr && qr.code && qr.signature;
 
-  const YLW = "#FFD000";
-  const DARK = "#1e2028";
-
   return (
     <div className="space-y-4 animate-slide-up">
-      {/* Welcome card */}
+      {/* Welcome card — dark hero band */}
       <div style={{
-        borderRadius: 14, padding: 20,
-        background: "linear-gradient(145deg, #1a1500, #111000)",
-        border: "1px solid rgba(255,208,0,0.3)",
-        boxShadow: "0 0 40px rgba(255,208,0,0.06)",
+        borderRadius: 14, padding: 20, position: "relative", overflow: "hidden",
+        background: INK,
       }}>
-        <p style={{ color: "rgba(255,208,0,0.5)", fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.06,
+          backgroundImage: `linear-gradient(${YLW} 1px, transparent 1px), linear-gradient(90deg, ${YLW} 1px, transparent 1px)`,
+          backgroundSize: "40px 40px",
+        }} />
+        <p style={{ color: YLW, fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", margin: 0 }}>
           BUSINESS PORTAL
         </p>
         <h1 style={{
           fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
           fontWeight: 800, fontSize: 28, color: "white", margin: "6px 0 0", lineHeight: 1,
         }}>{business.name}</h1>
-        {email && <p style={{ color: "#9294a8", fontSize: 12, marginTop: 4 }}>{email}</p>}
+        {email && <p style={{ color: "rgba(255,255,255,0.7)", fontSize: 12, marginTop: 6 }}>{email}</p>}
         {business.sponsor_tier && (
           <span style={{
             display: "inline-block", marginTop: 10,
-            background: "rgba(255,208,0,0.12)", border: "1px solid rgba(255,208,0,0.25)",
+            background: YLW,
             borderRadius: 20, padding: "4px 12px",
-            color: YLW, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
+            color: INK, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em",
           }}>
             {business.sponsor_tier}
           </span>
@@ -139,15 +154,15 @@ export default function BusinessDashboardPage() {
       </div>
 
       {/* QR Code section */}
-      <div style={{ borderRadius: 14, overflow: "hidden", background: DARK, border: "1px solid #222" }}>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid #1f2130", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <h2 style={{ color: "white", fontWeight: 700, fontSize: 13, margin: 0 }}>Your QR Code</h2>
+      <div style={{ borderRadius: 14, overflow: "hidden", background: BG, border: `1px solid ${BORDER}`, boxShadow: SHADOW_CARD }}>
+        <div style={{ padding: "14px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <h2 style={{ color: INK, fontWeight: 700, fontSize: 13, margin: 0 }}>Your QR Code</h2>
           {hasQr ? (
             <span style={{
               display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)",
+              background: "#ecfdf5", border: "1px solid #a7f3d0",
               borderRadius: 20, padding: "4px 10px",
-              color: "#10b981", fontSize: 11, fontWeight: 700,
+              color: "#047857", fontSize: 11, fontWeight: 700,
             }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
               Active
@@ -155,9 +170,9 @@ export default function BusinessDashboardPage() {
           ) : (
             <span style={{
               display: "flex", alignItems: "center", gap: 6,
-              background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)",
+              background: "#fffbeb", border: "1px solid #fcd34d",
               borderRadius: 20, padding: "4px 10px",
-              color: "#f59e0b", fontSize: 11, fontWeight: 700,
+              color: "#b45309", fontSize: 11, fontWeight: 700,
             }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
               Pending
@@ -179,13 +194,13 @@ export default function BusinessDashboardPage() {
                   { label: "Unique", value: qr!.unique_attendees ?? 0 },
                 ].map(({ label, value }) => (
                   <div key={label} style={{
-                    background: "#242636", border: "1px solid #282b3a", borderRadius: 10,
+                    background: YLW_TINT, border: `1px solid ${YLW}`, borderRadius: 10,
                     padding: "12px 8px", textAlign: "center",
                   }}>
-                    <p style={{ color: "#787b8f", fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", margin: 0 }}>{label.toUpperCase()}</p>
+                    <p style={{ color: INK_MUTED, fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", margin: 0 }}>{label.toUpperCase()}</p>
                     <p style={{
                       fontFamily: "'Barlow Condensed', Arial Narrow, Arial, sans-serif",
-                      fontWeight: 800, fontSize: 24, color: YLW, margin: "4px 0 0", lineHeight: 1,
+                      fontWeight: 800, fontSize: 24, color: INK, margin: "4px 0 0", lineHeight: 1,
                     }}>{value}</p>
                   </div>
                 ))}
@@ -194,7 +209,7 @@ export default function BusinessDashboardPage() {
           ) : (
             <div style={{ textAlign: "center", padding: "24px 0" }}>
               <div style={{
-                width: 56, height: 56, borderRadius: 12, background: "#242636",
+                width: 56, height: 56, borderRadius: 12, background: BG_SOFT, border: `1px solid ${BORDER}`,
                 display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px",
               }}>
                 <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -203,8 +218,8 @@ export default function BusinessDashboardPage() {
                   <path d="M21 16h-3a2 2 0 0 0-2 2v3M21 21v.01M12 7v3a2 2 0 0 1-2 2H7M3 12h.01M12 3h.01"/>
                 </svg>
               </div>
-              <p style={{ color: "white", fontWeight: 700, fontSize: 13 }}>QR Code Pending</p>
-              <p style={{ color: "#8b8fa8", fontSize: 12, marginTop: 6, lineHeight: 1.6, maxWidth: 260, margin: "6px auto 0" }}>
+              <p style={{ color: INK, fontWeight: 700, fontSize: 13, margin: 0 }}>QR Code Pending</p>
+              <p style={{ color: INK_LIGHT, fontSize: 12, marginTop: 6, lineHeight: 1.6, maxWidth: 260, margin: "6px auto 0" }}>
                 Your QR code will appear once the admin has approved and generated it.
               </p>
             </div>
@@ -213,15 +228,15 @@ export default function BusinessDashboardPage() {
       </div>
 
       {/* Business details */}
-      <div style={{ borderRadius: 14, padding: "16px 18px", background: DARK, border: "1px solid #222" }}>
-        <h2 style={{ color: "white", fontWeight: 700, fontSize: 13, marginBottom: 14 }}>Business Details</h2>
+      <div style={{ borderRadius: 14, padding: "16px 18px", background: BG, border: `1px solid ${BORDER}`, boxShadow: SHADOW_CARD }}>
+        <h2 style={{ color: INK, fontWeight: 700, fontSize: 13, marginBottom: 14 }}>Business Details</h2>
         <dl style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {business.website_url && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <dt style={{ color: "#787b8f", fontSize: 11, fontWeight: 600 }}>Website</dt>
+              <dt style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 600 }}>Website</dt>
               <dd>
                 <a href={business.website_url} target="_blank" rel="noopener noreferrer"
-                  style={{ color: YLW, fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
+                  style={{ color: INK, fontWeight: 600, fontSize: 12, textDecoration: "underline" }}>
                   {business.website_url.replace(/^https?:\/\//, "")}
                 </a>
               </dd>
@@ -229,12 +244,14 @@ export default function BusinessDashboardPage() {
           )}
           {business.contact_email && (
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <dt style={{ color: "#787b8f", fontSize: 11, fontWeight: 600 }}>Contact</dt>
-              <dd style={{ color: "#b8bace", fontSize: 12, fontWeight: 600 }}>{business.contact_email}</dd>
+              <dt style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 600 }}>Contact</dt>
+              <dd style={{ color: INK_BODY, fontSize: 12, fontWeight: 600 }}>{business.contact_email}</dd>
             </div>
           )}
         </dl>
       </div>
+
+      <style>{`@keyframes shimmer { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }`}</style>
     </div>
   );
 }

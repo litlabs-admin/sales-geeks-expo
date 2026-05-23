@@ -161,33 +161,36 @@ button, a {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Admin nav links — dark header with yellow hover */
+/* Admin nav links — light theme, TV-optimised */
 .admin-nav-link {
-  background: #1e2028;
-  border: 1px solid #2d3040;
-  color: #b8bace;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: 6px;
+  background: #F5F5F7;
+  border: 1px solid #E5E7EB;
+  color: #4B5563;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 8px;
   text-decoration: none;
-  transition: color 150ms, border-color 150ms;
+  transition: color 150ms, border-color 150ms, background 150ms;
 }
 .admin-nav-link:hover {
-  color: #FFD000;
-  border-color: rgba(255, 208, 0, 0.25);
+  color: #0A0E14;
+  border-color: #FFD000;
+  background: #FFFBE5;
 }
 .admin-back-link:hover {
-  color: #b8bace;
-  border-color: #787b8f;
+  color: #0A0E14;
+  border-color: #CBD5E1;
+  background: #FFFFFF;
 }
 .admin-event-link:hover {
-  background: #1f2130 !important;
-  border-color: #2d3040 !important;
+  background: #F5F5F7 !important;
+  border-color: #CBD5E1 !important;
 }
 .admin-sidebar-link:hover {
-  background: #1e2028;
-  color: #FFD000;
+  background: #FFFBE5;
+  color: #0A0E14;
+  border-color: #FFD000;
 }
 .admin-sidebar-link:hover span {
   opacity: 1 !important;

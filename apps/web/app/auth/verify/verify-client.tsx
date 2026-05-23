@@ -12,6 +12,13 @@ type ActorResponse = {
   };
 };
 
+/* ── Light theme palette ── */
+const YLW           = "#FFD000";
+const INK           = "#0A0E14";
+const INK_MUTED     = "#4B5563";
+
+const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
+
 function modeFrom(value: string | null): LoginMode {
   if (value === "admin" || value === "staff") return value;
   return "attendee";
@@ -169,28 +176,34 @@ export default function VerifyClient() {
 
   if (phase === "no-token") {
     return (
-      <p className="mt-4 text-sm text-slate-300">
+      <p style={{ marginTop: 16, fontSize: 13, color: INK_MUTED }}>
         This sign-in link is missing its token. Please request a fresh link.
       </p>
     );
   }
 
   if (phase === "checking") {
-    return <p className="mt-4 text-sm text-slate-300">Checking your session...</p>;
+    return <p style={{ marginTop: 16, fontSize: 13, color: INK_MUTED }}>Checking your session...</p>;
   }
 
   return (
     <div className="mt-6">
-      <p className="text-sm text-slate-300">Tap the button below to finish signing in.</p>
+      <p style={{ fontSize: 14, color: INK_MUTED }}>Tap the button below to finish signing in.</p>
       <button
         type="button"
         onClick={confirmSignIn}
         disabled={busy}
-        className="mt-4 w-full rounded-lg bg-brand px-4 py-3 text-base font-semibold text-white disabled:opacity-60"
+        style={{
+          marginTop: 16, width: "100%", padding: "14px 16px", borderRadius: 10,
+          background: YLW, color: INK, fontWeight: 800, fontSize: 15,
+          border: "none", cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.6 : 1, letterSpacing: "0.03em",
+          boxShadow: SHADOW_YLW, fontFamily: "inherit",
+        }}
       >
         {busy ? "Signing you in..." : "Confirm sign in"}
       </button>
-      {status ? <p className="mt-4 text-sm text-slate-300">{status}</p> : null}
+      {status ? <p style={{ marginTop: 16, fontSize: 13, color: INK_MUTED }}>{status}</p> : null}
     </div>
   );
 }

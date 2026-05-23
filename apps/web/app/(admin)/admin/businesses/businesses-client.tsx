@@ -22,26 +22,56 @@ type Business = {
   qr_status: string | null;
 };
 
+/* ── Light theme palette (TV-optimised) ── */
+const YLW           = "#FFD000";
+const YLW_TINT      = "#FFFBE5";
+const INK           = "#0A0E14";
+const INK_BODY      = "#1F2937";
+const INK_MUTED     = "#4B5563";
+const INK_LIGHT     = "#6B7280";
+const BG            = "#FFFFFF";
+const BG_SOFT       = "#F5F5F7";
+const BORDER        = "#E5E7EB";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
+const SHADOW_YLW  = "0 4px 14px rgba(255,208,0,0.4)";
+
 function StatusBadge({ hasQr, archived }: { hasQr: boolean; archived: boolean }) {
   if (archived) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
-        <span className="w-1 h-1 rounded-full bg-slate-400" />
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999,
+        background: BG_SOFT, color: INK_MUTED, border: `1px solid ${BORDER}`,
+        padding: "4px 12px", fontSize: 12, fontWeight: 700, letterSpacing: "0.02em",
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: INK_LIGHT }} />
         Archived
       </span>
     );
   }
   if (hasQr) {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-        <span className="w-1 h-1 rounded-full bg-emerald-500" />
+      <span style={{
+        display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999,
+        background: "rgba(16,185,129,0.1)", color: "#047857",
+        border: "1px solid rgba(16,185,129,0.3)",
+        padding: "4px 12px", fontSize: 12, fontWeight: 700, letterSpacing: "0.02em",
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#10b981" }} />
         Active — QR Generated
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-semibold text-amber-700">
-      <span className="w-1 h-1 rounded-full bg-amber-400" />
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 6, borderRadius: 999,
+      background: "rgba(245,158,11,0.1)", color: "#92400e",
+      border: "1px solid rgba(245,158,11,0.3)",
+      padding: "4px 12px", fontSize: 12, fontWeight: 700, letterSpacing: "0.02em",
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b" }} />
       Registered — No QR
     </span>
   );
@@ -89,27 +119,49 @@ function GenerateQrForm({ businessId, onSuccess, authHeaders }: GenerateQrFormPr
   }
 
   return (
-    <div className="mt-3 flex items-center gap-2 p-3 rounded-xl" style={{ background: "rgba(18,110,130,0.05)", border: "1px solid rgba(18,110,130,0.12)" }}>
+    <div
+      style={{
+        marginTop: 14,
+        display: "flex", alignItems: "flex-end", gap: 12,
+        padding: 14, borderRadius: 12,
+        background: YLW_TINT, border: `1px solid ${YLW}`,
+      }}
+    >
       <div>
-        <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1">Points</label>
+        <label style={{
+          display: "block", fontSize: 11, fontWeight: 800,
+          color: INK_MUTED, textTransform: "uppercase", letterSpacing: "0.06em",
+          marginBottom: 6,
+        }}>Points</label>
         <input
           type="number"
           min="0"
           value={points}
           onChange={(e) => setPoints(e.target.value)}
-          className="w-20 rounded-lg px-2 py-1.5 text-sm font-semibold text-ink"
-          style={{ border: "1.5px solid rgba(18,110,130,0.2)", background: "white" }}
+          style={{
+            width: 96, borderRadius: 8, padding: "8px 12px",
+            fontSize: 15, fontWeight: 700, color: INK,
+            border: `1.5px solid ${BORDER_STRONG}`, background: BG,
+            outline: "none", fontFamily: "inherit",
+          }}
         />
       </div>
       <button
         onClick={handleGenerate}
         disabled={busy}
-        className="mt-4 flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold text-white disabled:opacity-60 transition-all active:scale-95"
-        style={{ background: "linear-gradient(135deg, rgb(var(--brand-primary)) 0%, rgb(10 80 95) 100%)" }}
+        type="button"
+        style={{
+          display: "inline-flex", alignItems: "center", gap: 8,
+          padding: "10px 18px", borderRadius: 10,
+          background: INK, color: BG, fontWeight: 800, fontSize: 13,
+          border: "none", cursor: busy ? "default" : "pointer",
+          opacity: busy ? 0.6 : 1, fontFamily: "inherit",
+          letterSpacing: "0.02em",
+        }}
       >
         {busy ? "Generating…" : (
           <>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <rect width="5" height="5" x="3" y="3" rx="1" />
               <rect width="5" height="5" x="16" y="3" rx="1" />
               <rect width="5" height="5" x="3" y="16" rx="1" />
@@ -118,7 +170,7 @@ function GenerateQrForm({ businessId, onSuccess, authHeaders }: GenerateQrFormPr
           </>
         )}
       </button>
-      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+      {error && <p style={{ color: "#dc2626", fontSize: 12, marginLeft: 8 }}>{error}</p>}
     </div>
   );
 }
@@ -215,16 +267,30 @@ export default function AdminBusinessesClient({ events }: { events: EventSummary
     }
   }
 
-  const inputClass = "w-full rounded-xl px-3 py-2.5 text-sm";
-  const inputStyle = { border: "1.5px solid rgba(18,110,130,0.2)", background: "rgba(18,110,130,0.02)", outline: "none" };
+  const inputStyle: React.CSSProperties = {
+    width: "100%", borderRadius: 10, padding: "10px 14px",
+    fontSize: 15, color: INK,
+    border: `1.5px solid ${BORDER_STRONG}`, background: BG,
+    outline: "none", fontFamily: "inherit",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block", fontSize: 12, fontWeight: 800,
+    color: INK_MUTED, textTransform: "uppercase", letterSpacing: "0.06em",
+    marginBottom: 6,
+  };
 
   return (
-    <div className="mt-6 space-y-5">
-      {/* Event selector */}
-      <div className="flex items-center gap-3 flex-wrap">
+    <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Toolbar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <select
-          className="rounded-xl px-4 py-2.5 text-sm font-semibold text-ink"
-          style={{ border: "1.5px solid rgba(18,110,130,0.2)", background: "white" }}
+          style={{
+            borderRadius: 10, padding: "10px 16px", fontSize: 15, fontWeight: 700, color: INK,
+            border: `1px solid ${BORDER}`, background: BG, outline: "none",
+            boxShadow: SHADOW_CARD, fontFamily: "inherit",
+            minWidth: 220,
+          }}
           onChange={(e) => setEventId(e.target.value)}
           value={eventId}
         >
@@ -233,15 +299,18 @@ export default function AdminBusinessesClient({ events }: { events: EventSummary
           ))}
         </select>
 
-        <div className="flex rounded-xl overflow-hidden" style={{ border: "1.5px solid rgba(18,110,130,0.2)" }}>
+        <div style={{ display: "flex", overflow: "hidden", borderRadius: 10, border: `1px solid ${BORDER}`, boxShadow: SHADOW_CARD }}>
           {(["list", "create"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
-              className="px-4 py-2 text-xs font-bold transition-all"
+              type="button"
               style={{
-                background: tab === t ? "rgb(var(--brand-primary))" : "white",
-                color: tab === t ? "white" : "rgb(var(--brand-ink))"
+                padding: "10px 18px", fontSize: 13, fontWeight: 800,
+                background: tab === t ? INK : BG,
+                color: tab === t ? BG : INK_MUTED,
+                border: "none", cursor: "pointer", fontFamily: "inherit",
+                transition: "all 150ms",
               }}
             >
               {t === "list" ? "Businesses" : "+ Add Business"}
@@ -250,11 +319,16 @@ export default function AdminBusinessesClient({ events }: { events: EventSummary
         </div>
 
         <button
-          className="flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-bold border border-slate-200 hover:border-brand/30 text-slate-600 hover:text-brand transition-colors"
           onClick={loadBusinesses}
           type="button"
+          style={{
+            display: "flex", alignItems: "center", gap: 8,
+            border: `1px solid ${BORDER}`, background: BG_SOFT, color: INK_MUTED,
+            borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 700,
+            cursor: "pointer", fontFamily: "inherit",
+          }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" /><path d="M21 3v5h-5" /><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" /><path d="M8 16H3v5" />
           </svg>
           Refresh
@@ -262,49 +336,67 @@ export default function AdminBusinessesClient({ events }: { events: EventSummary
       </div>
 
       {status && (
-        <div className="rounded-xl px-4 py-3 text-sm" style={{ background: "rgba(18,110,130,0.06)", border: "1px solid rgba(18,110,130,0.15)" }}>
+        <div style={{
+          background: YLW_TINT, border: `1px solid ${YLW}`,
+          borderRadius: 10, padding: "12px 16px", color: INK_BODY, fontSize: 14, fontWeight: 600,
+        }}>
           {status}
         </div>
       )}
 
       {tab === "create" && (
         <form
-          className="rounded-2xl p-5 space-y-4"
           onSubmit={createBusiness}
-          style={{ background: "rgba(255,255,255,0.9)", border: "1px solid rgba(18,110,130,0.1)", boxShadow: "0 4px 20px rgba(18,110,130,0.08)" }}
+          style={{
+            background: BG, border: `1px solid ${BORDER}`,
+            borderRadius: 16, padding: 24,
+            boxShadow: SHADOW_LIFT,
+            display: "flex", flexDirection: "column", gap: 18,
+          }}
         >
-          <h2 className="font-bold text-base text-ink">Add Business</h2>
-          <div className="grid sm:grid-cols-2 gap-4">
+          <h2 style={{ color: INK, fontSize: 20, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>Add Business</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Business name *</label>
-              <input className={inputClass} style={inputStyle} name="name" required />
+              <label style={labelStyle}>Business name *</label>
+              <input style={inputStyle} name="name" required />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Contact email</label>
-              <input className={inputClass} style={inputStyle} name="contact_email" type="email" />
+              <label style={labelStyle}>Contact email</label>
+              <input style={inputStyle} name="contact_email" type="email" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Sponsor tier</label>
-              <input className={inputClass} style={inputStyle} name="sponsor_tier" placeholder="e.g. Strategic Headline" />
+              <label style={labelStyle}>Sponsor tier</label>
+              <input style={inputStyle} name="sponsor_tier" placeholder="e.g. Strategic Headline" />
             </div>
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">Website URL</label>
-              <input className={inputClass} style={inputStyle} name="website_url" type="url" />
+              <label style={labelStyle}>Website URL</label>
+              <input style={inputStyle} name="website_url" type="url" />
             </div>
           </div>
-          <div className="flex gap-3 pt-2">
+          <div style={{ display: "flex", gap: 12, paddingTop: 4 }}>
             <button
               type="button"
               onClick={() => setTab("list")}
-              className="flex-1 rounded-xl py-2.5 text-sm font-bold border border-slate-200 hover:border-brand/30 text-slate-600 hover:text-brand transition-colors"
+              style={{
+                flex: 1, borderRadius: 10, padding: "12px 16px",
+                fontSize: 14, fontWeight: 700, color: INK_MUTED,
+                background: BG, border: `1px solid ${BORDER}`,
+                cursor: "pointer", fontFamily: "inherit",
+              }}
             >
               Cancel
             </button>
             <button
-              className="flex-1 rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-60"
               disabled={busy}
               type="submit"
-              style={{ background: "linear-gradient(135deg, rgb(var(--brand-primary)) 0%, rgb(10 80 95) 100%)" }}
+              style={{
+                flex: 1, borderRadius: 10, padding: "12px 16px",
+                fontSize: 14, fontWeight: 800, color: INK,
+                background: YLW, border: "none",
+                cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1,
+                fontFamily: "inherit", boxShadow: SHADOW_YLW,
+                letterSpacing: "0.02em",
+              }}
             >
               {busy ? "Creating…" : "Create Business"}
             </button>
@@ -313,38 +405,51 @@ export default function AdminBusinessesClient({ events }: { events: EventSummary
       )}
 
       {tab === "list" && (
-        <div className="space-y-3">
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {businesses.length === 0 ? (
             <div
-              className="rounded-2xl p-8 text-center"
-              style={{ background: "rgba(255,255,255,0.8)", border: "1px solid rgba(18,110,130,0.1)" }}
+              style={{
+                background: BG, border: `1px solid ${BORDER}`,
+                borderRadius: 16, padding: "48px 24px", textAlign: "center",
+                boxShadow: SHADOW_CARD,
+              }}
             >
-              <p className="text-2xl mb-2">🏢</p>
-              <p className="text-slate-500 text-sm">No businesses yet. Add one or wait for self-registration.</p>
+              <p style={{ color: INK, fontSize: 17, fontWeight: 700, margin: 0 }}>No businesses yet</p>
+              <p style={{ color: INK_MUTED, fontSize: 14, marginTop: 6 }}>Add one or wait for self-registration.</p>
             </div>
           ) : (
             businesses.map((business) => (
               <article
                 key={business.id}
-                className="rounded-2xl p-4 transition-all card-hover"
-                style={{ background: "rgba(255,255,255,0.9)", border: "1px solid rgba(18,110,130,0.1)", boxShadow: "0 2px 12px rgba(18,110,130,0.06)" }}
+                style={{
+                  background: BG, border: `1px solid ${BORDER}`,
+                  borderRadius: 16, padding: 20,
+                  boxShadow: SHADOW_LIFT,
+                  transition: "transform 150ms, box-shadow 150ms",
+                }}
               >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-bold text-ink">{business.name}</h3>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <h3 style={{ color: INK, fontSize: 18, fontWeight: 800, margin: 0, letterSpacing: "-0.01em" }}>{business.name}</h3>
                       <StatusBadge hasQr={!!business.qr_code} archived={!!business.archived_at} />
                     </div>
-                    <p className="mt-1 text-xs text-slate-400">
+                    <p style={{ marginTop: 6, color: INK_MUTED, fontSize: 13, fontWeight: 500 }}>
                       {business.sponsor_tier ?? "No tier"}{business.contact_email ? ` · ${business.contact_email}` : ""}
                     </p>
                   </div>
                   {!business.archived_at && (
                     <button
-                      className="flex-shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-red-200 hover:text-red-600 transition-colors disabled:opacity-50"
                       disabled={busy}
                       onClick={() => archiveBusiness(business.id)}
                       type="button"
+                      style={{
+                        flexShrink: 0, borderRadius: 10, padding: "8px 14px",
+                        fontSize: 12, fontWeight: 700, color: INK_MUTED,
+                        background: BG, border: `1px solid ${BORDER}`,
+                        cursor: busy ? "default" : "pointer", opacity: busy ? 0.5 : 1,
+                        fontFamily: "inherit",
+                      }}
                     >
                       Archive
                     </button>

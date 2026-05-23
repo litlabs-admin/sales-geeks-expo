@@ -1,9 +1,21 @@
-﻿"use client";
+"use client";
 
 import { FormEvent, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type EventSummary = { id: string; name: string };
+
+/* ── Light theme palette (TV-optimised) ── */
+const YLW           = "#FFD000";
+const INK           = "#0A0E14";
+const INK_MUTED     = "#4B5563";
+const BG            = "#FFFFFF";
+const BG_SOFT       = "#F5F5F7";
+const BORDER        = "#E5E7EB";
+const BORDER_STRONG = "#CBD5E1";
+
+const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
+const SHADOW_YLW  = "0 4px 14px rgba(255,208,0,0.4)";
 
 const exportTypes = [
   { value: "attendees",     label: "Attendees" },
@@ -17,8 +29,18 @@ const exportTypes = [
   { value: "qr-analytics",  label: "QR Analytics" }
 ];
 
-const inputStyle = { border: "1px solid #282b3a", background: "#1e2028", outline: "none", color: "white" };
-const inputClass = "w-full rounded-xl px-3 py-2.5 text-sm transition-all";
+const inputStyle: React.CSSProperties = {
+  width: "100%", borderRadius: 10, padding: "12px 14px",
+  fontSize: 15, color: INK, fontWeight: 600,
+  border: `1.5px solid ${BORDER_STRONG}`, background: BG,
+  outline: "none", fontFamily: "inherit",
+};
+
+const labelStyle: React.CSSProperties = {
+  display: "block", fontSize: 12, fontWeight: 800,
+  color: INK_MUTED, textTransform: "uppercase", letterSpacing: "0.06em",
+  marginBottom: 8,
+};
 
 export default function AdminExportsClient({ events }: { events: EventSummary[] }) {
   const [eventId, setEventId] = useState(events[0]?.id ?? "");
@@ -64,19 +86,19 @@ export default function AdminExportsClient({ events }: { events: EventSummary[] 
 
   return (
     <form
-      className="mt-6 rounded-2xl p-5 space-y-4 animate-fade-in"
+      className="animate-fade-in"
       onSubmit={runExport}
       style={{
-        background: "rgba(255,255,255,0.9)",
-        border: "1px solid rgba(18,110,130,0.1)",
-        boxShadow: "0 4px 20px rgba(18,110,130,0.08)"
+        marginTop: 4, padding: 24, borderRadius: 16,
+        background: BG, border: `1px solid ${BORDER}`,
+        boxShadow: SHADOW_LIFT,
+        display: "flex", flexDirection: "column", gap: 18,
       }}
     >
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18 }}>
         <div>
-          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Event</label>
+          <label style={labelStyle}>Event</label>
           <select
-            className={inputClass}
             style={inputStyle}
             onChange={(e) => setEventId(e.target.value)}
             value={eventId}
@@ -87,9 +109,8 @@ export default function AdminExportsClient({ events }: { events: EventSummary[] 
           </select>
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Export Type</label>
+          <label style={labelStyle}>Export Type</label>
           <select
-            className={inputClass}
             style={inputStyle}
             onChange={(e) => setType(e.target.value)}
             value={type}
@@ -103,35 +124,57 @@ export default function AdminExportsClient({ events }: { events: EventSummary[] 
 
       {status && (
         <div
-          className="rounded-xl px-4 py-3 text-sm font-medium"
           style={{
-            background: isSuccess ? "rgba(16,185,129,0.06)" : busy ? "rgba(18,110,130,0.05)" : "rgba(239,68,68,0.06)",
-            border: `1px solid ${isSuccess ? "rgba(16,185,129,0.2)" : busy ? "rgba(18,110,130,0.15)" : "rgba(239,68,68,0.2)"}`,
-            color: isSuccess ? "#047857" : busy ? "rgb(var(--brand-primary))" : "#dc2626"
+            borderRadius: 10, padding: "12px 16px", fontSize: 14, fontWeight: 600,
+            background: isSuccess
+              ? "rgba(16,185,129,0.1)"
+              : busy
+                ? BG_SOFT
+                : "#fff0f0",
+            border: `1px solid ${
+              isSuccess
+                ? "rgba(16,185,129,0.3)"
+                : busy
+                  ? BORDER
+                  : "#fca5a5"
+            }`,
+            color: isSuccess ? "#047857" : busy ? INK_MUTED : "#dc2626",
           }}
         >
           {status}
         </div>
       )}
 
-      <div className="flex gap-3 pt-1">
+      <div style={{ display: "flex", gap: 12, paddingTop: 4 }}>
         <button
-          className="flex-1 rounded-xl py-3 text-sm font-bold text-white disabled:opacity-60 transition-all active:scale-95"
           disabled={busy || !eventId}
           type="submit"
-          style={{ background: "linear-gradient(135deg, rgb(var(--brand-primary)) 0%, rgb(10 80 95) 100%)" }}
+          style={{
+            flex: 1, borderRadius: 10, padding: "14px 18px",
+            fontSize: 15, fontWeight: 800, color: INK,
+            background: YLW, border: "none",
+            cursor: busy || !eventId ? "default" : "pointer", opacity: busy || !eventId ? 0.6 : 1,
+            fontFamily: "inherit", boxShadow: SHADOW_YLW,
+            letterSpacing: "0.02em",
+          }}
         >
           {busy ? "Generating…" : `Export ${selectedLabel}`}
         </button>
 
         {downloadUrl && (
           <a
-            className="flex-1 flex items-center justify-center gap-2 rounded-xl border-2 px-4 py-3 text-sm font-bold text-brand transition-colors hover:bg-brand/5"
-            style={{ borderColor: "rgb(var(--brand-primary))" }}
             download={`${type}-export${asOf ? `-${asOf.replace(/[^a-z0-9]/gi, "-")}` : ""}.csv`}
             href={downloadUrl}
+            style={{
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              borderRadius: 10, padding: "14px 18px",
+              fontSize: 15, fontWeight: 800, color: INK,
+              background: BG, border: `2px solid ${INK}`,
+              textDecoration: "none", fontFamily: "inherit",
+              letterSpacing: "0.02em",
+            }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
               <line x1="12" y1="15" x2="12" y2="3" />
