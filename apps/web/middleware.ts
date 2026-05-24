@@ -12,6 +12,7 @@ const ignoredFirstSegments = new Set([
   "auth",
   "access-denied",
   "dev",
+  "tv",
   "health",
   "login",
   "favicon.ico"
