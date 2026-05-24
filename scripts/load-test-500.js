@@ -38,6 +38,7 @@ const errorRate = new Rate("errors");
 const agendaLatency = new Trend("agenda_duration", true);
 const rewardsLatency = new Trend("rewards_duration", true);
 const leaderboardLatency = new Trend("leaderboard_duration", true);
+const leaderboardBlocksLatency = new Trend("leaderboard_blocks_duration", true);
 const attendeeMeLatency = new Trend("attendee_me_duration", true);
 
 export const options = {
@@ -57,10 +58,11 @@ export const options = {
     http_req_failed: ["rate<0.01"],
 
     // P95 latency targets per endpoint
-    agenda_duration:      ["p(95)<300"],
-    rewards_duration:     ["p(95)<300"],
-    leaderboard_duration: ["p(95)<500"],
-    attendee_me_duration: ["p(95)<400"],
+    agenda_duration:             ["p(95)<300"],
+    rewards_duration:            ["p(95)<300"],
+    leaderboard_duration:        ["p(95)<500"],
+    leaderboard_blocks_duration: ["p(95)<500"],
+    attendee_me_duration:        ["p(95)<400"],
 
     // Overall P95 across all requests
     http_req_duration: ["p(95)<600"],
@@ -120,6 +122,14 @@ export default function () {
     sleep(0.5);
   }
 
+  // ── Leaderboard blocks (~30% of attendees check the timed blocks tab) ───
+  if (roll < 0.3) {
+    const res = http.get(`${BACKEND}/leaderboard/blocks?event_id=${EVENT_ID}`, { headers: authHeaders });
+    const ok = check(res, { "leaderboard/blocks 200": (r) => r.status === 200 });
+    leaderboardBlocksLatency.add(res.timings.duration);
+    errorRate.add(!ok);
+  }
+
   // ── Rewards (checked by ~50% of attendees) ──────────────────────────────
   if (roll < 0.5) {
     const res = http.get(`${BACKEND}/rewards?event_id=${EVENT_ID}`, { headers: authHeaders });
@@ -157,6 +167,7 @@ export function handleSummary(data) {
   console.log(`  P95 agenda     : ${data.metrics.agenda_duration?.values?.["p(95)"]?.toFixed(0) ?? "—"} ms`);
   console.log(`  P95 rewards    : ${data.metrics.rewards_duration?.values?.["p(95)"]?.toFixed(0) ?? "—"} ms`);
   console.log(`  P95 leaderboard: ${data.metrics.leaderboard_duration?.values?.["p(95)"]?.toFixed(0) ?? "—"} ms`);
+  console.log(`  P95 lb/blocks  : ${data.metrics.leaderboard_blocks_duration?.values?.["p(95)"]?.toFixed(0) ?? "—"} ms`);
   console.log(`  P95 attendee/me: ${data.metrics.attendee_me_duration?.values?.["p(95)"]?.toFixed(0) ?? "—"} ms`);
   console.log("══════════════════════════════════════════\n");
 
