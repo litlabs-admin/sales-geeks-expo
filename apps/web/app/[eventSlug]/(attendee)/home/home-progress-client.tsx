@@ -79,10 +79,13 @@ function StatusDot({ active, label, warn }: { active: boolean; label: string; wa
   );
 }
 
+// Prizes are a static gallery (not redeemable) — see rewards-client.tsx.
+// Hardcoded count keeps the Home stat in sync without an extra API call.
+const PRIZES_AVAILABLE = 8;
+
 export default function HomeProgressClient({ eventId, slug, handleRef }: Props) {
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [ownRank, setOwnRank] = useState<LeaderboardOwn>(null);
-  const [rewardCount, setRewardCount] = useState(0);
   const [status, setStatus] = useState("Loading…");
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -94,20 +97,17 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
       const supabase = createBrowserSupabaseClient();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
-      if (!token) { setStatus("Sign in to see your points, rank, and rewards."); setLoading(false); return; }
+      if (!token) { setStatus("Sign in to see your points, rank, and prizes."); setLoading(false); return; }
       const headers = { authorization: `Bearer ${token}` };
-      const [attRes, lbRes, rwRes] = await Promise.all([
+      const [attRes, lbRes] = await Promise.all([
         fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/attendees/me?event_id=${eventId}`, { headers, cache: "no-store" }),
         fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/leaderboard?event_id=${eventId}`, { headers, cache: "no-store" }),
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/rewards?event_id=${eventId}`, { headers, cache: "no-store" }),
       ]);
       const attPayload = await attRes.json();
       const lbPayload = await lbRes.json();
-      const rwPayload = await rwRes.json();
       if (!attRes.ok) throw new Error(attPayload.error ?? "Could not load attendee");
       setAttendee(attPayload.attendee);
       setOwnRank(lbPayload.own ?? null);
-      setRewardCount((rwPayload.rewards ?? []).length);
       setStatus("");
       setLastUpdated(new Date());
     } catch (error) {
@@ -212,7 +212,7 @@ export default function HomeProgressClient({ eventId, slug, handleRef }: Props) 
         <StatCard label="SCORE" value={attendee?.competition_score ?? 0} accent big />
         <StatCard label="RANK" value={ownRank ? `#${ownRank.rank}` : "—"} />
         <StatCard label="BALANCE" value={attendee?.spendable_balance ?? 0} />
-        <StatCard label="REWARDS" value={rewardCount} />
+        <StatCard label="PRIZES" value={PRIZES_AVAILABLE} />
       </div>
 
       {/* Status bar */}
