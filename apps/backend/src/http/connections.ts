@@ -3,8 +3,10 @@ import type { Context } from "hono";
 import type { Actor } from "@sgexpo/domain/rbac";
 import { sql } from "../db/client";
 
-const CONNECTION_POINTS_SCANNER = 10;
-const CONNECTION_POINTS_SCANNED = 5;
+// 1 pt to each attendee per new connection — keeps networking incentive
+// without dominating sponsor QR scoring (which gives 5 pt per QR).
+const CONNECTION_POINTS_SCANNER = 1;
+const CONNECTION_POINTS_SCANNED = 1;
 
 async function ensureTable() {
   await sql`

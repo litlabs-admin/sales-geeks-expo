@@ -174,15 +174,22 @@ export default function QrScannerModal({ eventId, eventSlug, onClose, onScanSucc
           body: JSON.stringify({ event_id: eventId, sig }),
         });
 
+        // Backend returns { result: { status, points, newScore, zoneHint } }.
+        // Reading top-level points_awarded / new_score (the older shape) was
+        // why every scan rendered "+0".
         const payload = (await response.json().catch(() => ({}))) as {
-          status?: string;
-          points_awarded?: number;
-          new_score?: number;
+          result?: {
+            status?: string;
+            points?: number;
+            newScore?: number;
+            zoneHint?: string | null;
+          };
           message?: string;
           error?: string;
         };
+        const result = payload.result;
 
-        if (response.status === 409 || payload.status === "already_collected") {
+        if (result?.status === "already_collected") {
           setScanState({
             status: "already_collected",
             message: "You've already collected points from this QR code.",
@@ -192,27 +199,44 @@ export default function QrScannerModal({ eventId, eventSlug, onClose, onScanSucc
           return;
         }
 
-        if (!response.ok) {
+        if (result?.status === "not_yet_active") {
+          setScanState({ status: "error", message: "This QR isn't active yet. Try again later." });
+          processingRef.current = false;
+          return;
+        }
+
+        if (result?.status === "inactive" || result?.status === "expired") {
+          setScanState({ status: "error", message: "This QR code isn't available." });
+          processingRef.current = false;
+          return;
+        }
+
+        if (!response.ok && !result) {
           const msg = payload.error ?? payload.message ?? "Could not process scan.";
           setScanState({ status: "error", message: msg });
           processingRef.current = false;
           return;
         }
 
-        if ("vibrate" in navigator) navigator.vibrate([60, 30, 120]);
-        setScanState({
-          status: "success",
-          points: payload.points_awarded ?? 0,
-          newScore: payload.new_score ?? 0,
-          message: payload.message ?? "Points awarded!",
-        });
+        const awardedPts = result?.points ?? 0;
 
-        onScanSuccess?.();
+        if (result?.status === "awarded" && awardedPts > 0) {
+          if ("vibrate" in navigator) navigator.vibrate([60, 30, 120]);
+          setScanState({
+            status: "success",
+            points: awardedPts,
+            newScore: result?.newScore ?? 0,
+            message: payload.message ?? "Points awarded!",
+          });
 
-        // Auto-close after 3.5s
-        closeTimeoutRef.current = setTimeout(() => {
-          onClose();
-        }, 3500);
+          onScanSuccess?.();
+          closeTimeoutRef.current = setTimeout(() => { onClose(); }, 3500);
+          return;
+        }
+
+        // Fallthrough: unknown / zero-pt response.
+        setScanState({ status: "error", message: payload.error ?? "Could not process scan." });
+        processingRef.current = false;
       } catch {
         setScanState({
           status: "error",
