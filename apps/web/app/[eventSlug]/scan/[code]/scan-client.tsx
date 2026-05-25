@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 
 type ScanStatus =
@@ -116,14 +116,25 @@ export function ScanClient({
   const [errorMsg, setErrorMsg]     = useState("");
   const [coinBurst, setCoinBurst]   = useState(0); // incremented to remount coins
 
+  // Ref guards: prevent the effect firing the POST twice (React 18 Strict
+  // Mode in dev double-mounts effects; Next.js client navigation can also
+  // re-mount). Without this the second call hits the backend's redis
+  // replay-key branch and returns { awarded? no — already_collected,
+  // points: 0 }, which would overwrite the awarded splash.
+  const fetchedRef = useRef(false);
+  const latchedRef = useRef(false); // once awarded, no later response overrides
+
   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
     async function run() {
       const supabase = createBrowserSupabaseClient();
       const { data } = await supabase.auth.getSession();
       const token = data.session?.access_token;
 
       if (!token) {
-        setStatus("signed_out");
+        if (!latchedRef.current) setStatus("signed_out");
         return;
       }
 
@@ -146,6 +157,11 @@ export function ScanClient({
         error?: string;
       };
 
+      // Latched: an earlier render already showed awarded points. Don't
+      // overwrite the splash even if a later/duplicate response says
+      // already_collected with points: 0.
+      if (latchedRef.current) return;
+
       if (!res.ok && !payload.result) {
         setStatus("error");
         setErrorMsg(payload.error ?? "That scan could not be completed.");
@@ -154,16 +170,20 @@ export function ScanClient({
 
       const result = payload.result;
       const st = result?.status ?? "error";
-      setStatus(st);
-      setZoneHint(result?.zoneHint ?? null);
-      setNewScore(result?.newScore ?? null);
+      const pts = result?.points ?? 0;
 
-      if (st === "awarded") {
-        const pts = result?.points ?? 0;
+      if (st === "awarded" && pts > 0) {
+        // Lock the splash before flipping status so a duplicate response
+        // arriving later can't downgrade us to already_collected.
+        latchedRef.current = true;
         setAwardedPts(pts);
         setCoinBurst((k) => k + 1); // trigger coin remount
         animateCount(pts, setDisplayPts);
       }
+
+      setStatus(st);
+      setZoneHint(result?.zoneHint ?? null);
+      setNewScore(result?.newScore ?? null);
 
       if (!result?.status) {
         setErrorMsg(payload.error ?? "That scan is not available.");
@@ -171,8 +191,10 @@ export function ScanClient({
     }
 
     run().catch(() => {
-      setStatus("error");
-      setErrorMsg("Scan could not be completed. Please try again.");
+      if (!latchedRef.current) {
+        setStatus("error");
+        setErrorMsg("Scan could not be completed. Please try again.");
+      }
     });
   }, [code, eventId, sig]);
 
