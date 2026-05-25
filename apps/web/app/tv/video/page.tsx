@@ -11,10 +11,12 @@ const INK_LIGHT = "#6B7280";
 const BG        = "#FFFFFF";
 const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
-// Video source: set NEXT_PUBLIC_TV_VIDEO_URL to a CDN URL for production
-// (the m4v is 47 MB and is git-ignored). Falls back to /public for local dev.
-const VIDEO_SRC = process.env.NEXT_PUBLIC_TV_VIDEO_URL
-  ?? "/" + encodeURI("1. Sales Geek Hampden Promo.m4v");
+// Placeholder YouTube video until the SalesGeek Hampden promo is uploaded.
+// Override via NEXT_PUBLIC_TV_VIDEO_YOUTUBE_ID env var when switching to the
+// final promo (set the value to just the video id, e.g. "dQw4w9WgXcQ").
+const YT_ID = process.env.NEXT_PUBLIC_TV_VIDEO_YOUTUBE_ID ?? "Mc7XKiNrHQc";
+// `playlist=<id>` is what makes `loop=1` actually loop on YouTube's embed.
+const YT_EMBED = `https://www.youtube.com/embed/${YT_ID}?autoplay=1&mute=1&loop=1&playlist=${YT_ID}&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&disablekb=1&playsinline=1`;
 
 export default async function TvVideoPage({ searchParams }: { searchParams: { event?: string } }) {
   const slug = searchParams.event ?? "sge-2026";
@@ -29,7 +31,7 @@ export default async function TvVideoPage({ searchParams }: { searchParams: { ev
       <header style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between" }}>
         <div>
           <p style={{ color: INK_MUTED, fontSize: 14, fontWeight: 800, letterSpacing: "0.16em", margin: 0 }}>
-            SALESGEEK SCOTLAND · HAMPDEN PROMO
+            SALESGEEK SCOTLAND
           </p>
           <h1 style={{ fontFamily: DISP, fontWeight: 800, fontSize: 64, margin: "4px 0 0", lineHeight: 1, letterSpacing: "-0.01em", color: INK }}>
             SCOTTISH GROWTH EXPO 2026
@@ -53,18 +55,20 @@ export default async function TvVideoPage({ searchParams }: { searchParams: { ev
         background: INK,
         border: "1px solid #E5E7EB",
         boxShadow: "0 8px 32px rgba(15,18,23,0.10)",
-        display: "flex", alignItems: "center", justifyContent: "center",
+        position: "relative",
       }}>
-        {/* autoPlay + muted is required for browsers to allow looping playback
-            without user interaction. Loop runs indefinitely on the TV. */}
-        <video
-          src={VIDEO_SRC}
-          autoPlay
-          loop
-          muted
-          playsInline
-          controls={false}
-          style={{ width: "100%", height: "100%", objectFit: "contain", background: INK }}
+        <iframe
+          src={YT_EMBED}
+          title="Scottish Growth Expo 2026 promo"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          referrerPolicy="strict-origin-when-cross-origin"
+          allowFullScreen
+          style={{
+            position: "absolute", inset: 0,
+            width: "100%", height: "100%",
+            border: 0,
+            background: INK,
+          }}
         />
       </div>
     </main>
