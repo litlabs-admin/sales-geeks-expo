@@ -29,8 +29,19 @@ const BORDER    = "#E5E7EB";
 
 const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
 
+// All agenda times render in the venue's timezone regardless of where the
+// attendee is browsing from — the event is at Hampden, Glasgow (BST on
+// 26 May 2026). Without this, an attendee opening the app from a different
+// timezone sees shifted times (e.g. 09:30 BST → 14:00 IST) and the morning
+// filter goes empty.
+const VENUE_TZ = "Europe/London";
+
 function fmt(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: VENUE_TZ,
+  });
 }
 
 function duration(start: string, end: string) {
@@ -40,8 +51,17 @@ function duration(start: string, end: string) {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
+function venueHour(iso: string) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    hour: "numeric",
+    hourCycle: "h23",
+    timeZone: VENUE_TZ,
+  }).formatToParts(new Date(iso));
+  return Number(parts.find((p) => p.type === "hour")?.value ?? 0);
+}
+
 function isMorning(iso: string) {
-  return new Date(iso).getHours() < 12;
+  return venueHour(iso) < 12;
 }
 
 function isKeynote(title: string) {

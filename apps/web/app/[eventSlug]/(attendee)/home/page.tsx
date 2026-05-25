@@ -50,7 +50,10 @@ export default async function HomePage() {
   const next = agenda.sessions.find(s => s.status === "upcoming");
 
   function fmtTime(iso: string) {
-    return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+    // Always show event times in venue timezone (Glasgow / BST in May).
+    return new Date(iso).toLocaleTimeString("en-GB", {
+      hour: "2-digit", minute: "2-digit", timeZone: "Europe/London",
+    });
   }
 
   function fmtPosted(iso: string) {

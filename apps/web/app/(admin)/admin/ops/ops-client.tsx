@@ -238,7 +238,10 @@ type BlockRow = {
 };
 
 function fmtBlockHM(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  // Block times always rendered in venue TZ (Glasgow / BST in May).
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Europe/London",
+  });
 }
 
 function fmtCountdownLarge(seconds: number) {

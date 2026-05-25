@@ -40,7 +40,11 @@ const BLOCK_AGENDA: Record<string, Array<{ time: string; title: string; sub?: st
 };
 
 function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  // TV portals at Hampden render in BST. Force venue TZ so values stay
+  // correct even if the TV machine's timezone drifts.
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Europe/London",
+  });
 }
 
 export default async function TvBlocksPage({ searchParams }: { searchParams: { event?: string } }) {

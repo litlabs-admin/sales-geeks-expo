@@ -423,7 +423,11 @@ type BlockRow = {
 };
 
 function fmtBlockTime(iso: string) {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  // Event happens in Glasgow — render block times in venue TZ regardless
+  // of where the attendee is browsing from.
+  return new Date(iso).toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", timeZone: "Europe/London",
+  });
 }
 
 function fmtCountdown(seconds: number) {
