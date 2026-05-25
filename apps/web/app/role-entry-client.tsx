@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState } from "react";
+import SalesGeekLogo from "@/lib/salesgeek-logo";
 
 type RoleMode = "attendee" | "staff" | "admin" | "business";
 
@@ -228,16 +229,8 @@ export default function RoleEntryClient({ options }: Props) {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 20px", height: 56,
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <SGMark size={28} color={INK} />
-          <div style={{ lineHeight: 1 }}>
-            <span style={{ color: INK, fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", display: "block" }}>
-              SALESGEEK
-            </span>
-            <span style={{ color: INK_LIGHT, fontSize: 10, fontWeight: 600, letterSpacing: "0.08em" }}>
-              SCOTLAND
-            </span>
-          </div>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <SalesGeekLogo height={36} />
         </div>
         <button
           onClick={() => joinRef.current?.scrollIntoView({ behavior: "smooth" })}
@@ -650,9 +643,11 @@ export default function RoleEntryClient({ options }: Props) {
           FOOTER
       ════════════════════════════════ */}
       <footer style={{ background: BG_SOFT, padding: "36px 24px", textAlign: "center", borderTop: `1px solid ${BORDER}` }}>
-        <SGMark size={36} color={INK} />
-        <p style={{ color: INK, fontSize: 12, fontWeight: 700, marginTop: 14, letterSpacing: "0.06em" }}>
-          SALESGEEK SCOTLAND
+        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+          <SalesGeekLogo height={56} />
+        </div>
+        <p style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 700, marginTop: 10, letterSpacing: "0.12em" }}>
+          SCOTLAND
         </p>
         <p style={{ color: INK_LIGHT, fontSize: 11, marginTop: 4 }}>
           Scottish Growth Expo 2026 · 26 May · Hampden National Stadium, Glasgow

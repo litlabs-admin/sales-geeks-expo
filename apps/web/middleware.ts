@@ -123,5 +123,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"]
+  // Skip middleware for static assets in /public (images, fonts, etc.) so
+  // they don't get treated as event slugs and 404 with "Event not found".
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|woff|woff2|ttf|otf|css|map)).*)"
+  ]
 };

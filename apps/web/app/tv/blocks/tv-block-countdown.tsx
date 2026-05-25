@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 
-const YLW = "#FFD000";
+const INK       = "#0A0E14";
+const INK_MUTED = "#4B5563";
+const INK_LIGHT = "#6B7280";
 const DISP = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 function fmt(secs: number) {
@@ -17,9 +19,6 @@ function fmt(secs: number) {
   return `${s}s`;
 }
 
-/* Ticks every second locally so the countdown stays smooth between the 15s
-   server-side refresh. `mode` flips whether we're counting down to the
-   block's start (pending) or end (active). */
 export default function TvBlockCountdown({ startsAt, endsAt, mode }: {
   startsAt: string;
   endsAt: string;
@@ -36,15 +35,15 @@ export default function TvBlockCountdown({ startsAt, endsAt, mode }: {
   return (
     <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
       <span style={{
-        color: mode === "ends" ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.45)",
-        fontSize: 13, fontWeight: 800, letterSpacing: "0.12em",
+        color: mode === "ends" ? INK_MUTED : INK_LIGHT,
+        fontSize: 12, fontWeight: 800, letterSpacing: "0.14em",
       }}>
         {mode === "ends" ? "ENDS IN" : "STARTS IN"}
       </span>
       <span style={{
         fontFamily: DISP, fontWeight: 800, lineHeight: 1,
-        fontSize: mode === "ends" ? 56 : 40,
-        color: mode === "ends" ? YLW : "rgba(255,255,255,0.7)",
+        fontSize: mode === "ends" ? 38 : 30,
+        color: INK,
       }}>
         {fmt(secs)}
       </span>

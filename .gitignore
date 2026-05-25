@@ -12,3 +12,14 @@ playwright-report
 test-results
 *.tsbuildinfo
 ruvector.db
+
+# Local data — attendee CSVs, generated QR sheets (PII / signed URLs).
+# Keep out of version control; populate locally as needed.
+scripts/data/
+scripts/output/
+
+# Large media kept out of git (deploy via CDN). Local /tv/video uses
+# apps/web/public/1. Sales Geek Hampden Promo.m4v at run time.
+apps/web/public/*.m4v
+apps/web/public/*.mp4
+apps/web/public/*.webm

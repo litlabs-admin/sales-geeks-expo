@@ -5,14 +5,20 @@ import TvRefresh from "../_components/tv-refresh";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const YLW = "#FFD000";
-const INK = "#0A0E14";
-const BG = "#FFFFFF";
-const DISP = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
+const YLW       = "#FFD000";
+const YLW_TINT  = "#FFFBE5";
+const INK       = "#0A0E14";
+const INK_MUTED = "#4B5563";
+const INK_LIGHT = "#6B7280";
+const BG        = "#FFFFFF";
+const BG_SOFT   = "#F5F5F7";
+const BG_MUTED  = "#FAFAFA";
+const BORDER    = "#E5E7EB";
+const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 const MEDAL = {
   1: { fill: "#FFD000", label: "1st" },
-  2: { fill: "#D0D0D8", label: "2nd" },
+  2: { fill: "#9CA3AF", label: "2nd" },
   3: { fill: "#CD7F32", label: "3rd" }
 } as const;
 
@@ -24,63 +30,65 @@ export default async function TvLeaderboardPage({ searchParams }: { searchParams
   const top = await getTvPointsLeaderboard(event.id, 10);
 
   return (
-    <main style={{ height: "100dvh", padding: "32px 56px", display: "flex", flexDirection: "column" }}>
+    <main style={{ height: "100dvh", padding: "32px 56px", display: "flex", flexDirection: "column", background: BG }}>
       <TvRefresh />
 
       <header style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <div>
-          <p style={{ color: YLW, fontSize: 14, fontWeight: 800, letterSpacing: "0.16em", margin: 0 }}>
+          <p style={{ color: INK_MUTED, fontSize: 14, fontWeight: 800, letterSpacing: "0.16em", margin: 0 }}>
             {event.name.toUpperCase()} · LIVE
           </p>
-          <h1 style={{ fontFamily: DISP, fontWeight: 800, fontSize: 88, margin: "6px 0 0", lineHeight: 1, letterSpacing: "-0.01em" }}>
+          <h1 style={{ fontFamily: DISP, fontWeight: 800, fontSize: 88, margin: "6px 0 0", lineHeight: 1, letterSpacing: "-0.01em", color: INK }}>
             LEADERBOARD
           </h1>
         </div>
         <div style={{
           display: "inline-flex", alignItems: "center", gap: 10,
           padding: "10px 18px", borderRadius: 999,
-          background: "rgba(255,208,0,0.1)", border: "1px solid rgba(255,208,0,0.35)",
+          background: INK, border: `1px solid ${INK}`,
         }}>
           <span className="animate-yellow-pulse" style={{ width: 10, height: 10, borderRadius: "50%", background: YLW }} />
           <span style={{ color: YLW, fontSize: 14, fontWeight: 800, letterSpacing: "0.12em" }}>POINTS · TOP 10</span>
         </div>
       </header>
 
-      <div style={{ flex: 1, marginTop: 32, display: "flex", flexDirection: "column", gap: 10, overflow: "hidden" }}>
+      <div style={{ flex: 1, marginTop: 28, display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" }}>
         {top.length === 0 ? (
-          <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 22, marginTop: 60, textAlign: "center" }}>
+          <p style={{ color: INK_LIGHT, fontSize: 22, marginTop: 60, textAlign: "center" }}>
             No scores yet — leaderboard fills as attendees scan and connect.
           </p>
         ) : (
           top.map((row) => {
             const medal = MEDAL[row.rank as 1 | 2 | 3];
-            const accent = medal?.fill ?? "rgba(255,255,255,0.6)";
+            const accent = medal?.fill ?? INK_LIGHT;
             return (
               <div key={row.alias} style={{
                 display: "flex", alignItems: "center", gap: 24,
-                padding: "18px 28px",
+                padding: "14px 24px",
                 borderRadius: 14,
-                background: medal ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.025)",
-                border: `1px solid ${medal ? accent + "55" : "rgba(255,255,255,0.06)"}`,
+                background: medal ? YLW_TINT : BG_MUTED,
+                border: medal ? `1.5px solid ${accent}` : `1px solid ${BORDER}`,
+                boxShadow: medal ? "0 4px 12px rgba(255,208,0,0.10)" : "0 1px 2px rgba(15,18,23,0.04)",
               }}>
                 <div style={{
-                  width: 72, textAlign: "center",
-                  fontFamily: DISP, fontWeight: 800, fontSize: 48, color: accent, lineHeight: 1,
+                  width: 64, textAlign: "center",
+                  fontFamily: DISP, fontWeight: 800, fontSize: 42, color: accent, lineHeight: 1,
                 }}>
                   #{row.rank}
                 </div>
                 <div style={{
-                  width: 64, height: 64, borderRadius: "50%", flexShrink: 0,
-                  background: medal ? accent : "rgba(255,255,255,0.1)",
-                  color: medal ? INK : BG,
+                  width: 60, height: 60, borderRadius: "50%", flexShrink: 0,
+                  background: medal ? accent : BG_SOFT,
+                  color: medal ? INK : INK,
                   display: "flex", alignItems: "center", justifyContent: "center",
-                  fontFamily: DISP, fontWeight: 800, fontSize: 28,
+                  fontFamily: DISP, fontWeight: 800, fontSize: 26,
+                  border: medal ? "none" : `1px solid ${BORDER}`,
                 }}>
                   {row.alias.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{
-                    fontFamily: DISP, fontWeight: 800, fontSize: 42, color: BG,
+                    fontFamily: DISP, fontWeight: 800, fontSize: 38, color: INK,
                     margin: 0, lineHeight: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                     letterSpacing: "-0.01em",
                   }}>
@@ -89,11 +97,11 @@ export default async function TvLeaderboardPage({ searchParams }: { searchParams
                 </div>
                 <div style={{ textAlign: "right" }}>
                   <span style={{
-                    fontFamily: DISP, fontWeight: 800, fontSize: 56, color: YLW, lineHeight: 1,
+                    fontFamily: DISP, fontWeight: 800, fontSize: 52, color: INK, lineHeight: 1,
                   }}>
                     {row.competition_score}
                   </span>
-                  <span style={{ color: "rgba(255,208,0,0.7)", fontSize: 14, fontWeight: 800, letterSpacing: "0.12em", marginLeft: 8 }}>
+                  <span style={{ color: INK_MUTED, fontSize: 13, fontWeight: 800, letterSpacing: "0.12em", marginLeft: 8 }}>
                     PTS
                   </span>
                 </div>
@@ -103,9 +111,9 @@ export default async function TvLeaderboardPage({ searchParams }: { searchParams
         )}
       </div>
 
-      <footer style={{ marginTop: 20, display: "flex", justifyContent: "space-between", color: "rgba(255,255,255,0.4)", fontSize: 13, fontWeight: 600 }}>
+      <footer style={{ marginTop: 18, display: "flex", justifyContent: "space-between", color: INK_LIGHT, fontSize: 13, fontWeight: 600 }}>
         <span>Hampden National Stadium · 26 May 2026</span>
-        <span>Auto-refresh 15s · {new Date().toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+        <span>Auto-refresh 15s</span>
       </footer>
     </main>
   );

@@ -47,8 +47,7 @@ export default async function ScanPage({
   });
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-xl flex-col justify-center px-6 py-10">
-      <h1 className="text-2xl font-semibold text-ink">Scan</h1>
+    <main className="mx-auto max-w-xl min-h-dvh px-6 py-8">
       <ScanClient code={params.code} eventId={event.id} eventSlug={params.eventSlug} sig={searchParams.sig ?? ""} />
     </main>
   );
