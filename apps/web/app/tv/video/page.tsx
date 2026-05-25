@@ -11,10 +11,10 @@ const INK_LIGHT = "#6B7280";
 const BG        = "#FFFFFF";
 const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
-// Placeholder YouTube video until the SalesGeek Hampden promo is uploaded.
-// Override via NEXT_PUBLIC_TV_VIDEO_YOUTUBE_ID env var when switching to the
-// final promo (set the value to just the video id, e.g. "dQw4w9WgXcQ").
-const YT_ID = process.env.NEXT_PUBLIC_TV_VIDEO_YOUTUBE_ID ?? "Mc7XKiNrHQc";
+// Official SalesGeek Scottish Growth Expo 2026 promo on YouTube.
+// Override via NEXT_PUBLIC_TV_VIDEO_YOUTUBE_ID env var if you ever need to
+// point at a different video without redeploying.
+const YT_ID = process.env.NEXT_PUBLIC_TV_VIDEO_YOUTUBE_ID ?? "hxlD6wuVIhs";
 // `playlist=<id>` is what makes `loop=1` actually loop on YouTube's embed.
 const YT_EMBED = `https://www.youtube.com/embed/${YT_ID}?autoplay=1&mute=1&loop=1&playlist=${YT_ID}&controls=0&modestbranding=1&rel=0&showinfo=0&iv_load_policy=3&disablekb=1&playsinline=1`;
 
