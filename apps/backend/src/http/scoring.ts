@@ -671,8 +671,13 @@ export async function getLeaderboardBlocks(c: Context) {
   let leaderFetched = false;
 
   for (const b of blockTimes) {
-    const starts = new Date(b.starts_at).getTime();
-    const ends = new Date(b.ends_at).getTime();
+    // postgres.js can return timestamptz columns as either Date objects or
+    // ISO strings depending on driver settings / pooler mode — coerce both
+    // ends to Date here so toISOString() below never explodes.
+    const startsDate = b.starts_at instanceof Date ? b.starts_at : new Date(b.starts_at);
+    const endsDate   = b.ends_at   instanceof Date ? b.ends_at   : new Date(b.ends_at);
+    const starts = startsDate.getTime();
+    const ends = endsDate.getTime();
     const nowMs = now.getTime();
 
     let status: "pending" | "active" | "ended";
@@ -687,8 +692,8 @@ export async function getLeaderboardBlocks(c: Context) {
       winner = await lockWinnerForBlock({
         eventId,
         blockKey: b.key,
-        startsAt: b.starts_at,
-        endsAt: b.ends_at
+        startsAt: startsDate,
+        endsAt: endsDate
       });
     } else if (status === "active") {
       if (!leaderFetched) {
@@ -701,8 +706,8 @@ export async function getLeaderboardBlocks(c: Context) {
     blocks.push({
       key: b.key,
       label: b.label,
-      starts_at: b.starts_at.toISOString(),
-      ends_at: b.ends_at.toISOString(),
+      starts_at: startsDate.toISOString(),
+      ends_at: endsDate.toISOString(),
       status,
       seconds_until_start: Math.max(0, Math.floor((starts - nowMs) / 1000)),
       seconds_until_end:   Math.max(0, Math.floor((ends - nowMs) / 1000)),
