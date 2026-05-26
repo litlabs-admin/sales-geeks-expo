@@ -45,13 +45,13 @@ export default async function TvStatsPage({ searchParams }: { searchParams: { ev
         </div>
       </header>
 
-      <div style={{ flex: 1, marginTop: 32, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gridTemplateRows: "1fr 1fr", gap: 24 }}>
-        <Hero label="Total Connections" value={stats.total_connections} />
-        <Hero label="Checked In"        value={stats.checked_in} />
-        <Hero label="QR Scans"          value={stats.total_scans} />
-        <Tile label="Registered"        value={stats.total_attendees} />
-        <Tile label="OTP Verified"      value={stats.verified} />
-        <Tile label="Exhibitors"        value={null} placeholder="40 stands" />
+      {/* 6-col grid → top row: 3 heroes × 2 cols each; bottom row: 2 tiles × 3 cols each. */}
+      <div style={{ flex: 1, marginTop: 32, display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gridTemplateRows: "1fr 1fr", gap: 24 }}>
+        <div style={{ gridColumn: "span 2", display: "flex" }}><Hero label="Total Connections" value={stats.total_connections} /></div>
+        <div style={{ gridColumn: "span 2", display: "flex" }}><Hero label="Checked In"        value={stats.checked_in} /></div>
+        <div style={{ gridColumn: "span 2", display: "flex" }}><Hero label="QR Scans"          value={stats.total_scans} /></div>
+        <div style={{ gridColumn: "span 3", display: "flex" }}><Tile label="Registered"        value={stats.total_attendees} /></div>
+        <div style={{ gridColumn: "span 3", display: "flex" }}><Tile label="Exhibitors"        value={null} placeholder="40 stands" /></div>
       </div>
 
       <footer style={{ marginTop: 20, display: "flex", justifyContent: "space-between", color: INK_LIGHT, fontSize: 13, fontWeight: 600 }}>
@@ -65,6 +65,7 @@ export default async function TvStatsPage({ searchParams }: { searchParams: { ev
 function Hero({ label, value }: { label: string; value: number }) {
   return (
     <div style={{
+      flex: 1,
       borderRadius: 18, padding: "36px 32px",
       background: YLW_TINT,
       border: `1.5px solid ${YLW}`,
@@ -84,6 +85,7 @@ function Hero({ label, value }: { label: string; value: number }) {
 function Tile({ label, value, placeholder }: { label: string; value: number | null; placeholder?: string }) {
   return (
     <div style={{
+      flex: 1,
       borderRadius: 18, padding: "30px 28px",
       background: BG_SOFT,
       border: `1px solid ${BORDER}`,
