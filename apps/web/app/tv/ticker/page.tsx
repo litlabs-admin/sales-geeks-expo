@@ -78,17 +78,29 @@ export default async function TvTickerPage({ searchParams }: { searchParams: { e
                   display: "flex", alignItems: "center", gap: 24,
                   background: BG_SOFT,
                   border: `1px solid ${BORDER}`,
-                  borderRadius: 18, padding: "24px 36px",
-                  minWidth: 280, height: 180,
+                  borderRadius: 18, padding: "20px 28px",
+                  minWidth: 300, height: 200,
                   flexShrink: 0,
                 }}>
                   {b.logo_url ? (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      src={b.logo_url}
-                      alt={b.name}
-                      style={{ maxHeight: 120, maxWidth: 220, objectFit: "contain" }}
-                    />
+                    // White inner "well" so logos with transparent / white
+                    // backgrounds (Bridges, BGG, FSB, IoD, Grow Green Now)
+                    // stay visible against the ticker's light-grey card.
+                    <div style={{
+                      background: "#FFFFFF",
+                      borderRadius: 14,
+                      padding: "14px 18px",
+                      width: 260, height: 160,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      border: `1px solid ${BORDER}`,
+                    }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={b.logo_url}
+                        alt={b.name}
+                        style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }}
+                      />
+                    </div>
                   ) : (
                     <div style={{
                       fontFamily: DISP, fontWeight: 800, fontSize: 40, color: INK,
