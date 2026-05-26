@@ -109,9 +109,27 @@ export default function VerifyClient() {
         if (existing.session?.access_token) {
           session = existing.session;
         } else {
+          // Most common cause in production: stale PKCE / session state in
+          // localStorage from a previous visit poisons verifyOtp. Wipe it
+          // and tell the user to try once more — the next attempt starts
+          // from a clean slate. (Join form also wipes on submit, but if
+          // they got here from a stale magic-link URL the cleanup hasn't
+          // run yet.)
+          try {
+            await supabase.auth.signOut({ scope: "local" });
+            if (typeof window !== "undefined") {
+              for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+                const k = window.localStorage.key(i);
+                if (k && (k.startsWith("sb-") || k.startsWith("supabase."))) {
+                  window.localStorage.removeItem(k);
+                }
+              }
+            }
+          } catch { /* fall through */ }
+
           console.error("[verify] verifyOtp failed", error);
           setStatus(
-            `Sign-in failed: ${error?.message ?? "no session returned"} (${(error as { code?: string } | null)?.code ?? error?.status ?? "unknown"}). Request a fresh link and tap Confirm promptly.`
+            `That sign-in link can't be used. Tap "Start fresh" and request a new one — should work first try.`
           );
           setBusy(false);
           return;
@@ -204,6 +222,30 @@ export default function VerifyClient() {
         {busy ? "Signing you in..." : "Confirm sign in"}
       </button>
       {status ? <p style={{ marginTop: 16, fontSize: 13, color: INK_MUTED }}>{status}</p> : null}
+      {status && status.toLowerCase().includes("can't be used") ? (
+        <button
+          type="button"
+          onClick={() => {
+            const eventSlug = searchParams.get("eventSlug") ?? eventSlugFrom(next);
+            const path = mode === "admin"
+              ? "/admin/login"
+              : mode === "staff"
+                ? "/staff/login"
+                : eventSlug
+                  ? `/${eventSlug}/join`
+                  : "/login";
+            window.location.assign(`${path}?next=${encodeURIComponent(next)}`);
+          }}
+          style={{
+            marginTop: 10, width: "100%", padding: "12px 16px", borderRadius: 10,
+            background: INK, color: "#fff", fontWeight: 800, fontSize: 14,
+            border: "none", cursor: "pointer", letterSpacing: "0.03em",
+            fontFamily: "inherit",
+          }}
+        >
+          Start fresh
+        </button>
+      ) : null}
     </div>
   );
 }

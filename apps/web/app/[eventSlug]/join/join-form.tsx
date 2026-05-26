@@ -96,6 +96,29 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
   async function requestMagicLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const cleanEmail = normalizedEmail(email);
+
+    // Wipe any stale Supabase auth state in this browser before requesting a
+    // fresh token. Without this, an old PKCE code_verifier or expired session
+    // left over from a previous visit makes the upcoming verifyOtp call fail
+    // with "OTP expired" — even though the new token is brand new. Symptom in
+    // the wild today: attendees got the error in their normal browser but
+    // signing in via Incognito worked, because Incognito has empty
+    // localStorage.
+    try {
+      const supabase = createBrowserSupabaseClient();
+      await supabase.auth.signOut({ scope: "local" });
+      if (typeof window !== "undefined") {
+        for (let i = window.localStorage.length - 1; i >= 0; i -= 1) {
+          const key = window.localStorage.key(i);
+          if (key && (key.startsWith("sb-") || key.startsWith("supabase."))) {
+            window.localStorage.removeItem(key);
+          }
+        }
+      }
+    } catch {
+      // never block sign-in if the cleanup throws — fallback is to proceed
+    }
+
     const response = await fetch("/api/auth/magic-link", {
       method: "POST",
       headers: {
