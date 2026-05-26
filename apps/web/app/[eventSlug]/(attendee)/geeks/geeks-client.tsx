@@ -35,15 +35,6 @@ function IconExternal() {
   );
 }
 
-/* ── Star / Crown for William ── */
-function IconCrown({ color = INK }: { color?: string }) {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill={color} stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m2 4 3 12h14l3-12-6 7-4-7-4 7-6-7z"/><line x1="5" x2="19" y1="20" y2="20"/>
-    </svg>
-  );
-}
-
 /* ── Chevron ── */
 function IconChevron({ open }: { open: boolean }) {
   return (
@@ -74,8 +65,6 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
     return () => obs.disconnect();
   }, []);
 
-  const isWilliam = geek.is_william;
-
   return (
     <div
       ref={ref}
@@ -84,9 +73,9 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
         transform: visible ? "translateY(0)" : "translateY(20px)",
         transition: `opacity 350ms ease ${delay}ms, transform 350ms ease ${delay}ms`,
         borderRadius: 16,
-        border: isWilliam ? `1px solid ${YLW}` : `1px solid ${BORDER}`,
-        background: isWilliam ? YLW_TINT : BG,
-        boxShadow: isWilliam ? "0 6px 24px rgba(255,208,0,0.20), 0 2px 6px rgba(15,18,23,0.06)" : SHADOW_CARD,
+        border: `1px solid ${BORDER}`,
+        background: BG,
+        boxShadow: SHADOW_CARD,
         overflow: "hidden",
       }}>
 
@@ -103,14 +92,13 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
         {/* Avatar */}
         <div style={{
           width: 48, height: 48, borderRadius: "50%", flexShrink: 0,
-          background: isWilliam ? INK : BG_SOFT,
-          border: isWilliam ? `2px solid ${YLW}` : `2px solid ${BORDER}`,
+          background: BG_SOFT,
+          border: `2px solid ${BORDER}`,
           display: "flex", alignItems: "center", justifyContent: "center",
         }}>
           <span style={{
             fontFamily: "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
-            fontWeight: 800, fontSize: 20,
-            color: isWilliam ? YLW : INK,
+            fontWeight: 800, fontSize: 20, color: INK,
           }}>
             {geek.name.charAt(0).toUpperCase()}
           </span>
@@ -120,10 +108,9 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
         <div style={{ flex: 1, textAlign: "left" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ color: INK, fontWeight: 700, fontSize: 15 }}>{geek.name}</span>
-            {isWilliam && <IconCrown />}
           </div>
           <span style={{ color: INK_LIGHT, fontSize: 11, fontWeight: 500 }}>
-            {isWilliam ? "Premium Strategy · Host" : "Event Speaker"}
+            Sales Geek Scotland
           </span>
         </div>
 
@@ -138,25 +125,7 @@ function GeekCard({ geek, delay }: { geek: Geek; delay: number }) {
         <div className="animate-expand-down" style={{ padding: "0 16px 16px" }}>
           <p style={{ color: INK_BODY, fontSize: 13, lineHeight: 1.7 }}>{geek.bio}</p>
 
-          {isWilliam && (
-            <div style={{
-              marginTop: 12, padding: "12px 14px",
-              background: BG,
-              borderRadius: 8, border: `1px solid ${YLW}`,
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
-                <IconCrown />
-                <span style={{ color: INK, fontSize: 11, fontWeight: 700, letterSpacing: "0.06em" }}>
-                  PREMIUM REWARD
-                </span>
-              </div>
-              <p style={{ color: INK_BODY, fontSize: 12, lineHeight: 1.6, margin: 0 }}>
-                Book a private post-event strategy session. Redeem your points in the Rewards tab to unlock a limited slot.
-              </p>
-            </div>
-          )}
-
-          {geek.calendly_url && !isWilliam && (
+          {geek.calendly_url && (
             <a
               href={geek.calendly_url}
               target="_blank"
