@@ -84,7 +84,7 @@ export default async function TvLeaderboardPage({ searchParams }: { searchParams
             color: INK_BODY, fontSize: 28, fontWeight: 500, lineHeight: 1.5,
             margin: "32px auto 0", maxWidth: 880,
           }}>
-            What a day. Thanks for joining us at Hampden — for every connection made,
+            What a day. Thanks for joining us at Hampden - for every connection made,
             every conversation started, and every story shared.
           </p>
 
