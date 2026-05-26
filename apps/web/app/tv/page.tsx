@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EVENT_VIDEOS } from "./video/_catalog";
 
 const YLW       = "#FFD000";
 const YLW_TINT  = "#FFFBE5";
@@ -15,8 +16,13 @@ const PORTALS = [
   { href: "/tv/connections?event=sge-2026", title: "CONNECTIONS BOARD",  desc: "Most attendee connections made today" },
   { href: "/tv/blocks?event=sge-2026",      title: "TIMED BLOCKS",       desc: "Morning · Midday · Afternoon agenda + winners" },
   { href: "/tv/stats?event=sge-2026",       title: "LIVE STATS",         desc: "Check-ins, scans, connections" },
-  { href: "/tv/video?event=sge-2026",       title: "EVENT VIDEO",        desc: "Looping SalesGeek Hampden promo" },
-  { href: "/tv/ticker?event=sge-2026",      title: "SPONSOR TICKER",     desc: "Rolling exhibitor logos & names" }
+  { href: "/tv/video?event=sge-2026",       title: "MAIN PROMO",         desc: "Looping SalesGeek Hampden promo" },
+  { href: "/tv/ticker?event=sge-2026",      title: "SPONSOR TICKER",     desc: "Rolling exhibitor logos & names" },
+  ...EVENT_VIDEOS.map((v) => ({
+    href: `/tv/video/${v.ytId}?event=sge-2026`,
+    title: v.label.toUpperCase(),
+    desc: `Looping YouTube embed · id ${v.ytId}`,
+  })),
 ];
 
 export default function TvPortalIndex() {
