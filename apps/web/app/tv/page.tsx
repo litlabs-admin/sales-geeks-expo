@@ -12,6 +12,7 @@ const BORDER    = "#E5E7EB";
 const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 const PORTALS = [
+  { href: "/tv/winners?event=sge-2026",     title: "PRIZE WINNERS",      desc: "Overall + per-block prize winners · curated" },
   { href: "/tv/leaderboard?event=sge-2026", title: "POINTS LEADERBOARD", desc: "Top 10 by competition score · live" },
   { href: "/tv/connections?event=sge-2026", title: "CONNECTIONS BOARD",  desc: "Most attendee connections made today" },
   { href: "/tv/blocks?event=sge-2026",      title: "TIMED BLOCKS",       desc: "Morning · Midday · Afternoon agenda + winners" },
