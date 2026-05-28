@@ -36,18 +36,13 @@ const OVERALL_WINNERS: Winner[] = [
 
 type BlockWinner = {
   block: string;
-  time: string;
   winner: string;       // leave empty to show "Winner to be announced"
-  company?: string;
-  score?: number;       // points at end of block (derived from leaderboard)
 };
 
-// Computed from the final leaderboard CSV — highest score reached by the end
-// of each block (BST). Edit if Will picks different block winners manually.
 const BLOCK_WINNERS: BlockWinner[] = [
-  { block: "Block 1", time: "09:00 – 11:00", winner: "Andy1989",    score: 155 },
-  { block: "Block 2", time: "11:00 – 13:00", winner: "Chris",       score: 225 },
-  { block: "Block 3", time: "13:00 – 15:00", winner: "ClydeHealth", score: 230 }
+  { block: "Block 1", winner: "Andy1989" },
+  { block: "Block 2", winner: "Chris" },
+  { block: "Block 3", winner: "ClydeHealth" }
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -94,7 +89,7 @@ export default async function TvWinnersPage({ searchParams }: { searchParams: { 
       {/* Hero leader + others row */}
       <section style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", gap: 24, alignItems: "stretch" }}>
 
-        {/* LEADER (large card, photo-free) */}
+        {/* LEADER (large card) */}
         <div style={{
           borderRadius: 18, padding: 32,
           background: YLW_TINT, border: `1.5px solid ${YLW}`,
@@ -202,10 +197,10 @@ export default async function TvWinnersPage({ searchParams }: { searchParams: { 
         </div>
       </section>
 
-      {/* Block winners */}
+      {/* Block winners — label + winner name only, nothing else */}
       <section>
         <p style={{ color: INK_MUTED, fontSize: 11, fontWeight: 800, letterSpacing: "0.14em", margin: 0, borderLeft: `3px solid ${YLW}`, paddingLeft: 10 }}>
-          BLOCK WINNERS · 2-HOUR ROUNDS
+          BLOCK WINNERS
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 18, marginTop: 14 }}>
           {BLOCK_WINNERS.map((b, i) => (
@@ -228,59 +223,30 @@ function BlockCard({ block }: { block: BlockWinner }) {
   const hasWinner = block.winner && block.winner.trim().length > 0;
   return (
     <div style={{
-      borderRadius: 14, padding: "22px 24px",
+      borderRadius: 14, padding: "26px 28px",
       background: hasWinner ? BG : BG_SOFT,
       border: hasWinner ? `1.5px solid ${YLW}` : `1px solid ${BORDER}`,
       boxShadow: hasWinner ? "0 4px 12px rgba(255,208,0,0.12)" : "0 1px 2px rgba(15,18,23,0.04)",
       display: "flex", flexDirection: "column", gap: 14,
       minHeight: 150,
     }}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-        <p style={{
-          fontFamily: DISP, fontWeight: 800, fontSize: 28, color: INK,
-          margin: 0, lineHeight: 1, letterSpacing: "-0.01em",
-        }}>
-          {block.block}
-        </p>
-        <span style={{ color: INK_MUTED, fontSize: 13, fontWeight: 700 }}>
-          {block.time}
-        </span>
-      </div>
+      <p style={{
+        fontFamily: DISP, fontWeight: 800, fontSize: 32, color: INK,
+        margin: 0, lineHeight: 1, letterSpacing: "-0.01em",
+      }}>
+        {block.block}
+      </p>
 
       {hasWinner ? (
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginTop: "auto" }}>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ color: INK_MUTED, fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", margin: 0 }}>
-              WINNER
-            </p>
-            <p style={{
-              fontFamily: DISP, fontWeight: 800, fontSize: 32, color: INK,
-              margin: "4px 0 0", lineHeight: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-              letterSpacing: "-0.01em",
-            }}>
-              {block.winner}
-            </p>
-            {block.company && (
-              <p style={{ color: INK_MUTED, fontSize: 12, fontWeight: 600, margin: "4px 0 0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {block.company}
-              </p>
-            )}
-          </div>
-          {typeof block.score === "number" && (
-            <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <p style={{
-                fontFamily: DISP, fontWeight: 800, fontSize: 44, color: INK, margin: 0, lineHeight: 1,
-              }}>
-                {block.score}
-              </p>
-              <p style={{ color: INK_MUTED, fontSize: 10, fontWeight: 800, letterSpacing: "0.14em", margin: "2px 0 0" }}>
-                PTS
-              </p>
-            </div>
-          )}
-        </div>
+        <p style={{
+          fontFamily: DISP, fontWeight: 800, fontSize: 44, color: INK,
+          margin: "auto 0 0", lineHeight: 1.05, letterSpacing: "-0.01em",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+        }}>
+          {block.winner}
+        </p>
       ) : (
-        <p style={{ color: INK_LIGHT, fontSize: 14, fontWeight: 600, fontStyle: "italic", margin: "auto 0 0" }}>
+        <p style={{ color: INK_LIGHT, fontSize: 16, fontWeight: 600, fontStyle: "italic", margin: "auto 0 0" }}>
           Winner to be announced
         </p>
       )}
