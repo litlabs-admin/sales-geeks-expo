@@ -10,25 +10,47 @@ const INK       = "#0A0E14";
 const INK_MUTED = "#4B5563";
 const INK_LIGHT = "#6B7280";
 const BG        = "#FFFFFF";
+const BG_SOFT   = "#F5F5F7";
 const BORDER    = "#E5E7EB";
 const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 // ─── EDIT THESE ────────────────────────────────────────────────────────────
-// Three blocks, each with a winner + the prize they won. Add or change names,
-// companies, and prizes freely. Leave winner empty to show "Winner to be
-// announced".
+// Three blocks, two winners each. Edit names, companies, and prizes freely.
 
-type Block = {
-  label: string;
-  winner: string;
+type Winner = {
+  rank: number;
+  name: string;
   company?: string;
   prize: string;
 };
 
+type Block = {
+  label: string;
+  winners: Winner[];
+};
+
 const BLOCKS: Block[] = [
-  { label: "Block 1", winner: "Andy",         company: "Target Communications", prize: "5 Scotland tickets" },
-  { label: "Block 2", winner: "Chris Shanks", company: "",                      prize: "Golf" },
-  { label: "Block 3", winner: "Norelle",      company: "Acuity Associates",     prize: "2 VIP Queens tickets" }
+  {
+    label: "Block 1",
+    winners: [
+      { rank: 1, name: "Andy",         company: "Target Communications", prize: "5 Scotland tickets" },
+      { rank: 2, name: "Chris Shanks",                                   prize: "Golf" }
+    ]
+  },
+  {
+    label: "Block 2",
+    winners: [
+      { rank: 1, name: "Norelle",      company: "Acuity Associates",     prize: "2 VIP Queens tickets" },
+      { rank: 2, name: "Gill Wilson",  company: "Buttered Host",         prize: "Whisky" }
+    ]
+  },
+  {
+    label: "Block 3",
+    winners: [
+      { rank: 1, name: "Jan Michel K",                                   prize: "JMK Lord's cricket" },
+      { rank: 2, name: "Robert Craig", company: "Clyde Health Ltd",      prize: "SG business audit" }
+    ]
+  }
 ];
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -69,7 +91,7 @@ export default async function TvWinnersPage({ searchParams }: { searchParams: { 
         </div>
       </header>
 
-      {/* Three block cards take the rest of the screen */}
+      {/* Three block cards */}
       <section style={{
         flex: 1,
         display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 26,
@@ -88,14 +110,12 @@ export default async function TvWinnersPage({ searchParams }: { searchParams: { 
 /* ── Block card ───────────────────────────────────────────────────────── */
 
 function BlockCard({ block }: { block: Block }) {
-  const hasWinner = block.winner && block.winner.trim().length > 0;
-
   return (
     <div style={{
-      borderRadius: 20, padding: "36px 38px",
+      borderRadius: 20, padding: "30px 30px 28px",
       background: YLW_TINT, border: `1.5px solid ${YLW}`,
       boxShadow: "0 8px 28px rgba(255,208,0,0.18), 0 2px 6px rgba(15,18,23,0.04)",
-      display: "flex", flexDirection: "column", gap: 24,
+      display: "flex", flexDirection: "column", gap: 22,
     }}>
       {/* Block label */}
       <span style={{
@@ -107,48 +127,63 @@ function BlockCard({ block }: { block: Block }) {
         {block.label}
       </span>
 
-      {hasWinner ? (
-        <>
-          {/* Winner */}
-          <div>
-            <p style={{
-              fontFamily: DISP, fontWeight: 800, color: INK,
-              fontSize: "clamp(56px, 5.5vw, 84px)",
-              margin: 0, lineHeight: 0.98, letterSpacing: "-0.02em",
-              wordBreak: "break-word",
-            }}>
-              {block.winner}
-            </p>
-            {block.company && (
-              <p style={{ color: INK_MUTED, fontSize: 22, fontWeight: 700, margin: "10px 0 0" }}>
-                {block.company}
-              </p>
-            )}
-          </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        {block.winners.map((w, idx) => (
+          <WinnerRow key={idx} winner={w} divider={idx > 0} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
-          {/* Prize */}
-          <div style={{
-            padding: "20px 24px", borderRadius: 14,
-            background: BG, border: `1px solid ${YLW}`,
-            marginTop: "auto",
+function WinnerRow({ winner, divider }: { winner: Winner; divider: boolean }) {
+  return (
+    <div style={{
+      paddingTop: divider ? 22 : 0,
+      borderTop: divider ? `1px dashed ${YLW}` : "none",
+      display: "flex", flexDirection: "column", gap: 12,
+    }}>
+      {/* Rank + Name */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+        <span style={{
+          fontFamily: DISP, fontWeight: 800, fontSize: 38, color: INK_MUTED,
+          lineHeight: 1, minWidth: 56,
+        }}>
+          #{winner.rank}
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{
+            fontFamily: DISP, fontWeight: 800, color: INK,
+            fontSize: "clamp(36px, 3.8vw, 56px)",
+            margin: 0, lineHeight: 1, letterSpacing: "-0.02em",
+            wordBreak: "break-word",
           }}>
-            <p style={{ color: INK_MUTED, fontSize: 11, fontWeight: 800, letterSpacing: "0.16em", margin: 0 }}>
-              PRIZE
+            {winner.name}
+          </p>
+          {winner.company && (
+            <p style={{ color: INK_MUTED, fontSize: 16, fontWeight: 700, margin: "6px 0 0" }}>
+              {winner.company}
             </p>
-            <p style={{
-              fontFamily: DISP, fontWeight: 800, color: INK,
-              fontSize: "clamp(28px, 2.4vw, 40px)",
-              margin: "6px 0 0", lineHeight: 1.05, letterSpacing: "-0.01em",
-            }}>
-              {block.prize}
-            </p>
-          </div>
-        </>
-      ) : (
-        <p style={{ color: INK_LIGHT, fontSize: 22, fontWeight: 600, fontStyle: "italic", margin: "auto 0" }}>
-          Winner to be announced
+          )}
+        </div>
+      </div>
+
+      {/* Prize */}
+      <div style={{
+        padding: "14px 18px", borderRadius: 12,
+        background: BG, border: `1px solid ${YLW}`,
+      }}>
+        <p style={{ color: INK_MUTED, fontSize: 10, fontWeight: 800, letterSpacing: "0.16em", margin: 0 }}>
+          PRIZE
         </p>
-      )}
+        <p style={{
+          fontFamily: DISP, fontWeight: 800, color: INK,
+          fontSize: "clamp(22px, 1.9vw, 30px)",
+          margin: "4px 0 0", lineHeight: 1.1, letterSpacing: "-0.01em",
+        }}>
+          {winner.prize}
+        </p>
+      </div>
     </div>
   );
 }
