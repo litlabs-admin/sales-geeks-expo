@@ -77,7 +77,7 @@ export default async function TvWinnersPage({ searchParams }: { searchParams: { 
             fontFamily: DISP, fontWeight: 800, fontSize: 88, lineHeight: 1,
             letterSpacing: "-0.01em", color: INK, margin: "6px 0 0",
           }}>
-            BLOCK WINNERS
+            LEADERBOARD
           </h1>
         </div>
         <div style={{
