@@ -34,7 +34,7 @@ const BLOCKS: Block[] = [
     label: "Block 1",
     winners: [
       { rank: 1, name: "Andy",         company: "Target Communications", prize: "5 Scotland tickets" },
-      { rank: 2, name: "Chris Shanks",                                   prize: "Golf" }
+      { rank: 2, name: "Chris Shanks",                                   prize: "4 Ball Golf" }
     ]
   },
   {
@@ -48,7 +48,7 @@ const BLOCKS: Block[] = [
     label: "Block 3",
     winners: [
       { rank: 1, name: "Jan Michel K",                                   prize: "JMK Lord's cricket" },
-      { rank: 2, name: "Robert Craig", company: "Clyde Health Ltd",      prize: "Golf Tickets" }
+      { rank: 2, name: "Robert Craig", company: "Clyde Health Ltd",      prize: "Malt Whisky" }
     ]
   }
 ];
