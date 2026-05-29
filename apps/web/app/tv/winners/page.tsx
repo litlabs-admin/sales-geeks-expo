@@ -160,11 +160,9 @@ function WinnerRow({ winner, divider }: { winner: Winner; divider: boolean }) {
           }}>
             {winner.name}
           </p>
-          {winner.company && (
-            <p style={{ color: INK_MUTED, fontSize: 16, fontWeight: 700, margin: "6px 0 0" }}>
-              {winner.company}
-            </p>
-          )}
+          <p style={{ color: INK_MUTED, fontSize: 16, fontWeight: 700, margin: "6px 0 0", minHeight: 20 }}>
+            {winner.company ?? " "}
+          </p>
         </div>
       </div>
 
