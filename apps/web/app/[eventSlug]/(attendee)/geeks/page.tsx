@@ -7,12 +7,11 @@ type Geek = {
   name: string;
   bio: string;
   calendly_url: string | null;
-  is_william: boolean;
 };
 
 export default async function GeeksPage() {
   const eventId = headers().get("x-event-id") ?? "";
-  const geeks = await fetchContent<Geek>("geeks", eventId, "id,name,bio,calendly_url,is_william", {
+  const geeks = await fetchContent<Geek>("geeks", eventId, "id,name,bio,calendly_url", {
     order: "sort_order.asc"
   }).catch(() => [] as Geek[]);
 

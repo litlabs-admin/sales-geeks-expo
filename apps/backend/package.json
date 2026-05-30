@@ -13,7 +13,6 @@
     "@hono/node-server": "^1.13.8",
     "@sgexpo/domain": "workspace:*",
     "dotenv": "^16.4.7",
-    "drizzle-orm": "^0.38.4",
     "hono": "^4.6.16",
     "ioredis": "^5.4.2",
     "jose": "^5.9.6",

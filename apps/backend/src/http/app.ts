@@ -32,13 +32,6 @@ import {
 import { listEvents, transitionEvent } from "./events";
 import { awardScanRoute, getLeaderboard, getLeaderboardBlocks } from "./scoring";
 import {
-  calendlyWebhookRoute,
-  claimWilliamRoute,
-  listRewards,
-  redeemRewardRoute,
-  reverseRedemptionRoute
-} from "./rewards";
-import {
   createNotification,
   markNotificationRead,
   notificationFeed,
@@ -119,10 +112,6 @@ export function createApp() {
   app.get("/leaderboard/connections", requireSupabaseJwt, getConnectionLeaderboard);
   app.post("/attendees/connect", requireSupabaseJwt, archiveMutationGuard, recordConnection);
   app.get("/attendees/connections", requireSupabaseJwt, getMyConnections);
-  app.get("/rewards", requireSupabaseJwt, listRewards);
-  app.post("/rewards/redeem", requireSupabaseJwt, archiveMutationGuard, redeemRewardRoute);
-  app.post("/rewards/william/claim", requireSupabaseJwt, archiveMutationGuard, claimWilliamRoute);
-  app.post("/webhooks/calendly/:eventSlug", calendlyWebhookRoute);
   app.get("/notifications/feed", requireSupabaseJwt, notificationFeed);
   app.post("/notifications/:id/read", requireSupabaseJwt, markNotificationRead);
   app.get("/content/agenda", agenda);
@@ -156,12 +145,6 @@ export function createApp() {
   app.post("/staff/qr-campaigns/:id/activate", requireSupabaseJwt, requireRole("staff"), setQrCampaignState);
   app.post("/staff/qr-campaigns/:id/deactivate", requireSupabaseJwt, requireRole("staff"), setQrCampaignState);
   app.get("/staff/qr-campaigns/:id/analytics", requireSupabaseJwt, requireRole("staff"), qrCampaignAnalytics);
-  app.post(
-    "/admin/redemptions/:id/reverse",
-    requireSupabaseJwt,
-    requireRole("admin"),
-    reverseRedemptionRoute
-  );
   app.post("/admin/announcements", requireSupabaseJwt, requireRole("admin"), createAnnouncement);
   app.post("/admin/notifications", requireSupabaseJwt, requireRole("admin"), createNotification);
   app.post("/admin/notifications/due", requireSupabaseJwt, requireRole("admin"), processDueNotifications);

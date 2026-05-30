@@ -67,28 +67,6 @@ async function exportRows(type: string, eventId: string) {
     return toCsv(rows, ["rank", "alias", "competition_score", "reached_current_score_at"]);
   }
 
-  if (type === "rewards") {
-    const rows = await sql<Array<Record<string, unknown>>>`
-      select id, name, type, cost, inventory, per_attendee_limit, lock_until, expires_at, created_at
-      from public.rewards
-      where event_id = ${eventId}
-      order by name asc
-    `;
-    return toCsv(rows, ["id", "name", "type", "cost", "inventory", "per_attendee_limit", "lock_until", "expires_at", "created_at"]);
-  }
-
-  if (type === "redemptions") {
-    const rows = await sql<Array<Record<string, unknown>>>`
-      select r.id, a.alias, rw.name as reward_name, r.state, rw.cost as points_spent, r.created_at, r.completed_at
-      from public.redemption_records r
-      join public.attendees a on a.id = r.attendee_id
-      join public.rewards rw on rw.id = r.reward_id
-      where r.event_id = ${eventId}
-      order by r.created_at asc
-    `;
-    return toCsv(rows, ["id", "alias", "reward_name", "state", "points_spent", "created_at", "completed_at"]);
-  }
-
   if (type === "notifications") {
     const rows = await sql<Array<Record<string, unknown>>>`
       select id, title, audience, scheduled_at, delivered_at, created_at

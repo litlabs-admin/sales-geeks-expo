@@ -85,17 +85,15 @@ export type TvStats = {
   checked_in: number;
   verified: number;
   total_scans: number;
-  rewards_redeemed: number;
   total_connections: number;
   connections_last_hour: number;
 };
 
 export async function getTvStats(eventId: string): Promise<TvStats> {
   const supabase = serviceSupabase();
-  const [att, scans, redemptions, connections] = await Promise.all([
+  const [att, scans, connections] = await Promise.all([
     supabase.from("attendees").select("id,checked_in_at,is_verified").eq("event_id", eventId),
     supabase.from("scan_records").select("id", { count: "exact", head: true }).eq("event_id", eventId),
-    supabase.from("redemption_records").select("id", { count: "exact", head: true }).eq("event_id", eventId).neq("state", "reversed"),
     supabase.from("attendee_connections").select("id,created_at").eq("event_id", eventId)
   ]);
 
@@ -113,7 +111,6 @@ export async function getTvStats(eventId: string): Promise<TvStats> {
     checked_in: checked,
     verified,
     total_scans: scans.count ?? 0,
-    rewards_redeemed: redemptions.count ?? 0,
     total_connections: connRows.length,
     connections_last_hour: lastHour
   };

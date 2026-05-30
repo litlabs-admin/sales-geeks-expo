@@ -43,10 +43,6 @@
       "types": "./src/rbac.ts",
       "default": "./src/rbac.ts"
     },
-    "./rewards": {
-      "types": "./src/rewards.ts",
-      "default": "./src/rewards.ts"
-    },
     "./scoring": {
       "types": "./src/scoring.ts",
       "default": "./src/scoring.ts"

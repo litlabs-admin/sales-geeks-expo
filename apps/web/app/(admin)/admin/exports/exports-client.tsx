@@ -22,8 +22,6 @@ const exportTypes = [
   { value: "scans",         label: "Scan Records" },
   { value: "sponsor-leads", label: "Sponsor Leads" },
   { value: "leaderboard",   label: "Leaderboard" },
-  { value: "rewards",       label: "Rewards" },
-  { value: "redemptions",   label: "Redemptions" },
   { value: "notifications", label: "Notifications" },
   { value: "audit-logs",    label: "Audit Logs" },
   { value: "qr-analytics",  label: "QR Analytics" }

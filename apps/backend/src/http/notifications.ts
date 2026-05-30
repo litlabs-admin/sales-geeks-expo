@@ -272,10 +272,10 @@ export async function opsDashboard(c: Context) {
   }
 
   // Live stats: small, fast counts that drive the TV-readable header tiles
-  // (Registered, Checked In, OTP Verified, QR Scans, Rewards Out, Total
-  // Connections). Computed in parallel; degrade individually on failure so a
-  // single broken counter never blanks the whole dashboard.
-  const [attendeeStats, scanStats, redemptionStats, connectionStats] = await Promise.all([
+  // (Registered, Checked In, OTP Verified, QR Scans, Total Connections).
+  // Computed in parallel; degrade individually on failure so a single broken
+  // counter never blanks the whole dashboard.
+  const [attendeeStats, scanStats, connectionStats] = await Promise.all([
     sql<Array<{ total: number; checked_in: number; verified: number }>>`
       select
         count(*)::int as total,
@@ -286,11 +286,6 @@ export async function opsDashboard(c: Context) {
     `.catch(() => [{ total: 0, checked_in: 0, verified: 0 }]),
     sql<Array<{ total: number }>>`
       select count(*)::int as total from public.scan_records where event_id = ${eventId}
-    `.catch(() => [{ total: 0 }]),
-    sql<Array<{ total: number }>>`
-      select count(*)::int as total
-      from public.redemption_records
-      where event_id = ${eventId} and state <> 'reversed'
     `.catch(() => [{ total: 0 }]),
     sql<Array<{ total: number; last_hour: number; last_5m: number }>>`
       select
@@ -307,7 +302,6 @@ export async function opsDashboard(c: Context) {
     checked_in:             attendeeStats[0]?.checked_in ?? 0,
     verified:               attendeeStats[0]?.verified ?? 0,
     total_scans:            scanStats[0]?.total ?? 0,
-    rewards_redeemed:       redemptionStats[0]?.total ?? 0,
     total_connections:      connectionStats[0]?.total ?? 0,
     connections_last_hour:  connectionStats[0]?.last_hour ?? 0,
     connections_last_5m:    connectionStats[0]?.last_5m ?? 0,

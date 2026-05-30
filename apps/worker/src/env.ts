@@ -17,7 +17,6 @@ if (envFile) config({ path: envFile });
 export const env = z
   .object({
     DATABASE_URL: z.string().url(),
-    REDIS_URL: z.string().default("redis://localhost:6379"),
     WORKER_PORT: z.coerce.number().default(8082)
   })
   .parse(process.env);

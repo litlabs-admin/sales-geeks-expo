@@ -56,13 +56,6 @@ const SCORE_BANDS = [
   { label: "500+",    count: 34, color: "#f59e0b" },
 ];
 
-const REWARD_BREAKDOWN = [
-  { label: "Merch Pack",       redeemed: 29, color: YLW },
-  { label: "VIP Lunch",        redeemed: 14, color: "#f59e0b" },
-  { label: "Strategy Session", redeemed: 7,  color: "#10b981" },
-  { label: "Book Bundle",      redeemed: 22, color: "#6366f1" },
-];
-
 // ── Tiny SVG helpers ──────────────────────────────────────────────────────────
 
 function LineChart({ data }: { data: { label: string; value: number }[] }) {
@@ -158,46 +151,6 @@ function HorizBars({ data }: { data: { label: string; count: number; color: stri
   );
 }
 
-function DonutChart({ data }: { data: { label: string; redeemed: number; color: string }[] }) {
-  const total = data.reduce((s, d) => s + d.redeemed, 0) || 1;
-  const R = 46, cx = 70, cy = 70, stroke = 18;
-  let offset = 0;
-  const circumference = 2 * Math.PI * R;
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 24 }}>
-      <svg width={140} height={140} viewBox="0 0 140 140" style={{ flexShrink: 0 }}>
-        <circle cx={cx} cy={cy} r={R} fill="none" stroke={BG_SOFT} strokeWidth={stroke} />
-        {data.map((d) => {
-          const pct = d.redeemed / total;
-          const len = pct * circumference;
-          const el = (
-            <circle key={d.label} cx={cx} cy={cy} r={R}
-              fill="none" stroke={d.color} strokeWidth={stroke}
-              strokeDasharray={`${len} ${circumference - len}`}
-              strokeDashoffset={-offset * circumference}
-              style={{ transition: "stroke-dasharray 0.5s ease" }}
-            />
-          );
-          offset += pct;
-          return el;
-        })}
-        <text x={cx} y={cy - 4} textAnchor="middle" fontSize={28} fontWeight="800" fill={INK}
-          fontFamily={DISP}>{total}</text>
-        <text x={cx} y={cy + 14} textAnchor="middle" fontSize={11} fontWeight={600} fill={INK_LIGHT}>redeemed</text>
-      </svg>
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-        {data.map((d) => (
-          <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{ width: 12, height: 12, borderRadius: 3, background: d.color, flexShrink: 0, border: `1px solid ${INK}` }} />
-            <span style={{ color: INK_BODY, fontSize: 14, flex: 1, fontWeight: 600 }}>{d.label}</span>
-            <span style={{ color: INK, fontSize: 16, fontWeight: 800, fontFamily: DISP }}>{d.redeemed}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ── Live stats from backend ───────────────────────────────────────────────────
 type LiveStats = {
@@ -205,7 +158,6 @@ type LiveStats = {
   checked_in: number;
   verified: number;
   total_scans: number;
-  rewards_redeemed: number;
   total_connections: number;
   connections_last_hour: number;
   connections_last_5m: number;
@@ -217,7 +169,6 @@ const MOCK_LIVE: LiveStats = {
   checked_in: 241,
   verified: 198,
   total_scans: 1034,
-  rewards_redeemed: 72,
   total_connections: 412,
   connections_last_hour: 38,
   connections_last_5m: 7,
@@ -622,7 +573,6 @@ export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
         <StatCard label="Checked In"   value={live.checked_in}          sub={`${checkinPct}% of registered`} />
         <StatCard label="OTP Verified" value={live.verified}            sub={`${verifiedPct}% verified`} />
         <StatCard label="QR Scans"     value={live.total_scans}         sub="all-time across QRs" />
-        <StatCard label="Rewards Out"  value={live.rewards_redeemed}    sub="redemptions today" />
       </div>
 
       {/* Timed leaderboard blocks — projected on TV during the day */}
@@ -674,14 +624,9 @@ export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
       </div>
 
       {/* Charts row 2 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-        <ChartCard title="Score Distribution" sub="Attendees by points band">
-          <HorizBars data={SCORE_BANDS} />
-        </ChartCard>
-        <ChartCard title="Reward Redemptions" sub="Breakdown by reward type">
-          <DonutChart data={REWARD_BREAKDOWN} />
-        </ChartCard>
-      </div>
+      <ChartCard title="Score Distribution" sub="Attendees by points band">
+        <HorizBars data={SCORE_BANDS} />
+      </ChartCard>
 
       {/* Post-event actions */}
       <ChartCard title="Post-Event Actions" sub="Run after the event closes">
@@ -695,9 +640,7 @@ export default function AdminOpsClient({ events }: { events: EventSummary[] }) {
             { label: "Supabase DB",        ok: true,  latency: "12ms" },
             { label: "Auth Service",       ok: true,  latency: "8ms" },
             { label: "QR Engine",          ok: true,  latency: "22ms" },
-            { label: "Rewards Ledger",     ok: true,  latency: "18ms" },
             { label: "Notification Queue", ok: true,  latency: "—" },
-            { label: "Calendly Webhook",   ok: false, latency: "timeout" },
           ].map((s) => (
             <div key={s.label} style={{
               background: s.ok ? BG_SOFT : "#fff0f0",

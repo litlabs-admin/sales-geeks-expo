@@ -1,14 +1,11 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import Redis from "ioredis";
 import { env } from "./env";
 import { fanoutNotification } from "./jobs/notifications-fanout";
 import { fanoutDueNotifications } from "./jobs/notifications-due-poll";
-import { reconcileWilliam } from "./jobs/william-reconciliation";
 import { archiveTransition } from "./jobs/archive-transition";
 
 const app = new Hono();
-const redis = new Redis(env.REDIS_URL, { maxRetriesPerRequest: 2 });
 
 async function dispatch(name: string, payload: unknown) {
   if (name === "notifications-fanout") {
@@ -23,10 +20,6 @@ async function dispatch(name: string, payload: unknown) {
     return fanoutDueNotifications();
   }
 
-  if (name === "william-reconciliation") {
-    return reconcileWilliam();
-  }
-
   if (name === "archive-transition") {
     return archiveTransition();
   }
@@ -37,7 +30,6 @@ async function dispatch(name: string, payload: unknown) {
 app.post("/jobs/:name", async (c) => {
   const name = c.req.param("name");
   const payload = await c.req.json().catch(() => ({}));
-  await redis.lpush("worker:jobs", JSON.stringify({ name, payload, queued_at: new Date().toISOString() }));
   const result = await dispatch(name, payload);
   return c.json({ ok: true, result });
 });

@@ -7,7 +7,6 @@ type Geek = {
   name: string;
   bio: string;
   calendly_url: string | null;
-  is_william: boolean;
 };
 
 /* ── Light theme palette ── */
