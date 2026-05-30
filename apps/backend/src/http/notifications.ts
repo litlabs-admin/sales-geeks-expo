@@ -316,7 +316,6 @@ export async function opsDashboard(c: Context) {
       () => sql`select * from public.vw_ops_scans_per_minute where event_id = ${eventId} order by minute desc limit 10`
     ),
     widget("qr_activity", () => sql`select * from public.vw_ops_qr_activity where event_id = ${eventId} order by total_scans desc limit 10`),
-    widget("low_stock", () => sql`select * from public.vw_ops_low_stock where event_id = ${eventId}`),
     widget("recent_audit", () => sql`select * from public.vw_ops_recent_audit limit 20`)
   ]);
 
