@@ -233,7 +233,7 @@ export default function VerifyClient() {
                 ? "/staff/login"
                 : eventSlug
                   ? `/${eventSlug}/join`
-                  : "/login";
+                  : "/";
             window.location.assign(`${path}?next=${encodeURIComponent(next)}`);
           }}
           style={{

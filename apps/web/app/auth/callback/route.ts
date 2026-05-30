@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     mode === "admin" ? "/admin/login" :
     mode === "staff" ? "/staff/login" :
     mode === "business" ? "/business/login" :
-    eventSlug ? `/${eventSlug}/join` : "/login";
+    eventSlug ? `/${eventSlug}/join` : "/";
   const errorDescription = searchParams.get("error_description");
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
