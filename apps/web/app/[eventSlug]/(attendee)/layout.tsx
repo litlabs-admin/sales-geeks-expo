@@ -1,61 +1,27 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import { backendBaseUrl } from "@/lib/config";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import ScanFab from "@/lib/scan-fab";
 import AddToHomeHint from "@/lib/add-to-home-hint";
+import AttendeeBootstrap from "@/lib/attendee-bootstrap";
 import AttendeeNav from "./attendee-nav";
-
-type MeResponse = {
-  actor?: {
-    role?: "attendee" | "staff" | "admin";
-    id?: string;
-  };
-};
 
 export default async function AttendeeLayout({ children, params }: { children: React.ReactNode; params?: { eventSlug?: string } }) {
   const headerStore = headers();
   const slug = headerStore.get("x-event-slug") ?? params?.eventSlug ?? "sge-2026";
   const eventId = headerStore.get("x-event-id") ?? "";
   const requestPath = headerStore.get("x-request-path") ?? `/${slug}/home`;
+
+  // Only a local cookie read — no network. If there's no session, bounce to
+  // join. Everything that used to block here (role check + attendee upsert +
+  // first-time welcome redirect) now runs client-side in <AttendeeBootstrap>
+  // after first paint, so the shell + page render instantly even on slow
+  // mobile data. This is the core fix for the "only works on WiFi" problem.
   const supabase = createServerSupabaseClient();
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-
-  if (!token) {
+  if (!data.session?.access_token) {
     redirect(`/${slug}/join?next=${encodeURIComponent(requestPath)}`);
-  }
-
-  if (eventId) {
-    const actorResponse = await fetch(`${backendBaseUrl()}/me`, {
-      headers: {
-        authorization: `Bearer ${token}`
-      },
-      cache: "no-store"
-    });
-    const actorPayload = (await actorResponse.json().catch(() => ({}))) as MeResponse;
-
-    if (actorPayload.actor?.role !== "attendee") {
-      redirect("/access-denied?required=attendee");
-    }
-
-    const upsertResponse = await fetch(`${backendBaseUrl()}/attendees/upsert`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json"
-      },
-      body: JSON.stringify({ event_id: eventId })
-    });
-    const upsertPayload = (await upsertResponse
-      .json()
-      .catch(() => ({}))) as { attendee?: { alias_set?: boolean } };
-
-    // First-time attendees pick a unique display name before entering the app.
-    if (upsertPayload.attendee?.alias_set === false) {
-      redirect(`/${slug}/welcome`);
-    }
   }
 
   return (
@@ -94,6 +60,7 @@ export default async function AttendeeLayout({ children, params }: { children: R
       </div>
 
       <AddToHomeHint />
+      <AttendeeBootstrap eventId={eventId} slug={slug} />
 
       {children}
 

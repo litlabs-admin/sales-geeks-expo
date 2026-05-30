@@ -2,22 +2,30 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@sgexpo/contracts/db-types";
 
-const ignoredFirstSegments = new Set([
+// Authenticated areas + attendee event pages need their Supabase session
+// cookie refreshed by middleware. Genuinely public paths (TV portals, API
+// routes that do their own bearer auth, health) do NOT — skipping the
+// getUser() round-trip there removes a network hop from every TV refresh
+// (every 15s × N screens) and every API call.
+const publicNoAuthSegments = new Set([
+  "tv",
+  "api",
+  "health",
+  "access-denied",
+  "favicon.ico"
+]);
+
+// Paths that need auth refresh but are NOT event-scoped (so skip the event
+// lookup): admin/staff/business consoles, the auth + login flows, root.
+const nonEventSegments = new Set([
   "",
   "_next",
-  "api",
   "admin",
   "staff",
   "business",
   "auth",
-  "access-denied",
-  "dev",
-  "tv",
-  "health",
-  "login",
-  "favicon.ico"
+  "login"
 ]);
-
 
 type PublicEvent = {
   id: string;
@@ -33,25 +41,49 @@ type PublicEvent = {
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
-function isIgnoredPath(pathname: string) {
-  const firstSegment = pathname.split("/")[1] ?? "";
-  return ignoredFirstSegments.has(firstSegment);
-}
+// In-memory TTL cache for event metadata. Events barely change during their
+// run, so a short TTL turns "one Supabase REST call per attendee navigation"
+// into "one call per slug per TTL per warm isolate". Big slow-network win.
+const EVENT_TTL_MS = 60_000;
+const eventCache = new Map<string, { event: PublicEvent; expiresAt: number }>();
 
 function cleanCssToken(value: string | undefined, fallback: string) {
   return (value ?? fallback).replace(/^"|"$/g, "");
 }
 
+async function lookupEvent(supabaseUrl: string, anonKey: string, slug: string): Promise<PublicEvent | null> {
+  const cached = eventCache.get(slug);
+  if (cached && cached.expiresAt > Date.now()) return cached.event;
+
+  const response = await fetch(
+    `${supabaseUrl}/rest/v1/events_public?slug=eq.${encodeURIComponent(slug)}&select=id,slug,name,lifecycle_state,brand_tokens&limit=1`,
+    { headers: { apikey: anonKey, authorization: `Bearer ${anonKey}` } }
+  );
+  if (!response.ok) throw new Error("event lookup failed");
+
+  const events = (await response.json()) as PublicEvent[];
+  const event = events[0] ?? null;
+  if (event) eventCache.set(slug, { event, expiresAt: Date.now() + EVENT_TTL_MS });
+  return event;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const firstSegment = pathname.split("/")[1] ?? "";
+
+  // Public paths: no auth refresh, no event lookup — return immediately.
+  if (publicNoAuthSegments.has(firstSegment)) {
+    return NextResponse.next();
+  }
+
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  const requestHeaders = new Headers(request.headers);
-  const authCookies: CookieToSet[] = [];
-
   if (!supabaseUrl || !anonKey) {
     return new NextResponse("Event lookup is not configured", { status: 500 });
   }
+
+  const requestHeaders = new Headers(request.headers);
+  const authCookies: CookieToSet[] = [];
 
   const supabase = createServerClient<Database>(supabaseUrl, anonKey, {
     cookies: {
@@ -65,47 +97,29 @@ export async function middleware(request: NextRequest) {
     }
   });
 
+  // Refresh the session cookie for authenticated areas + attendee pages.
   await supabase.auth.getUser();
 
   function nextWithAuthCookies(headers = requestHeaders) {
-    const response = NextResponse.next({
-      request: {
-        headers
-      }
-    });
-
+    const response = NextResponse.next({ request: { headers } });
     authCookies.forEach(({ name, value, options }) => {
       response.cookies.set(name, value, options);
     });
-
     return response;
   }
 
-  if (isIgnoredPath(pathname)) {
+  // Non-event-scoped authenticated areas: refresh done, no event header needed.
+  if (nonEventSegments.has(firstSegment)) {
     return nextWithAuthCookies();
   }
 
-  const eventSlug = pathname.split("/")[1];
-
-  const response = await fetch(
-    `${supabaseUrl}/rest/v1/events_public?slug=eq.${encodeURIComponent(
-      eventSlug
-    )}&select=id,slug,name,lifecycle_state,brand_tokens&limit=1`,
-    {
-      headers: {
-        apikey: anonKey,
-        authorization: `Bearer ${anonKey}`
-      }
-    }
-  );
-
-  if (!response.ok) {
+  // Attendee event page → resolve (cached) event metadata into request headers.
+  let event: PublicEvent | null;
+  try {
+    event = await lookupEvent(supabaseUrl, anonKey, firstSegment);
+  } catch {
     return new NextResponse("Event lookup failed", { status: 502 });
   }
-
-  const events = (await response.json()) as PublicEvent[];
-  const event = events[0];
-
   if (!event) {
     return new NextResponse("Event not found", { status: 404 });
   }

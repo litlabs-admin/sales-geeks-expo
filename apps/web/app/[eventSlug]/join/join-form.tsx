@@ -64,15 +64,10 @@ export default function JoinForm({ eventId, eventSlug }: JoinFormProps) {
         return;
       }
 
-      await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/attendees/upsert`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${token}`,
-          "content-type": "application/json"
-        },
-        body: JSON.stringify({ event_id: eventId })
-      });
-
+      // Already signed in — go straight to the app. Ensuring the attendee
+      // row exists now happens in <AttendeeBootstrap> on the destination
+      // page, so we don't block this redirect on a backend round-trip
+      // (which on slow mobile data left users stuck on the spinner).
       if (!cancelled) {
         router.replace(next);
         router.refresh();
