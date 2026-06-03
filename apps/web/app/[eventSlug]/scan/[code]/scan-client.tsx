@@ -109,7 +109,6 @@ export function ScanClient({
   sig: string;
 }) {
   const [status, setStatus]         = useState<ScanStatus>("checking");
-  const [awardedPts, setAwardedPts] = useState(0);
   const [displayPts, setDisplayPts] = useState(0);
   const [newScore, setNewScore]     = useState<number | null>(null);
   const [zoneHint, setZoneHint]     = useState<string | null>(null);
@@ -176,7 +175,6 @@ export function ScanClient({
         // Lock the splash before flipping status so a duplicate response
         // arriving later can't downgrade us to already_collected.
         latchedRef.current = true;
-        setAwardedPts(pts);
         setCoinBurst((k) => k + 1); // trigger coin remount
         animateCount(pts, setDisplayPts);
       }

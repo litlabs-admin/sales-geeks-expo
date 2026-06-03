@@ -45,7 +45,6 @@ type ProfileData = {
 const YLW           = "#FFD000";
 const YLW_TINT      = "#FFFBE5";
 const INK           = "#0A0E14";
-const INK_BODY      = "#1F2937";
 const INK_MUTED     = "#4B5563";
 const INK_LIGHT     = "#6B7280";
 const BG            = "#FFFFFF";

@@ -10,8 +10,6 @@ const INK       = "#0A0E14";
 const INK_MUTED = "#4B5563";
 const INK_LIGHT = "#6B7280";
 const BG        = "#FFFFFF";
-const BG_SOFT   = "#F5F5F7";
-const BORDER    = "#E5E7EB";
 const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 // ─── EDIT THESE ────────────────────────────────────────────────────────────

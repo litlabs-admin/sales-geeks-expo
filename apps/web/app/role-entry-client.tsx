@@ -36,20 +36,6 @@ const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06
 const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
 const SHADOW_YLW  = "0 8px 28px rgba(255,208,0,0.4), 0 4px 12px rgba(15,18,23,0.08)";
 
-/* ── Sales Geek glasses mark ── */
-function SGMark({ size = 32, color = INK }: { size?: number; color?: string }) {
-  const s = size;
-  return (
-    <svg width={s} height={Math.round(s * 0.72)} viewBox="0 0 40 29" fill="none" aria-hidden>
-      <rect x="1.5" y="9"  width="13" height="11" rx="3.5" stroke={color} strokeWidth="2.5" />
-      <rect x="25.5" y="9" width="13" height="11" rx="3.5" stroke={color} strokeWidth="2.5" />
-      <line x1="14.5" y1="14.5" x2="25.5" y2="14.5" stroke={color} strokeWidth="2.5" strokeLinecap="round" />
-      <polyline points="31,6 35,2 39,6" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="35" y1="2" x2="35" y2="9" stroke={color} strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 function ChevronDown() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

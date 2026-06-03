@@ -7,13 +7,11 @@ const YLW           = "#FFD000";
 const YLW_TINT      = "#FFFBE5";
 const INK           = "#0A0E14";
 const INK_BODY      = "#1F2937";
-const INK_MUTED     = "#4B5563";
 const INK_LIGHT     = "#6B7280";
 const BG            = "#FFFFFF";
 const BORDER        = "#E5E7EB";
 
 const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
-const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
 const DISP        = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 type Prize = {

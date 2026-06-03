@@ -11,7 +11,6 @@ type Sponsor = {
 /* ── Light theme palette ── */
 const YLW           = "#FFD000";
 const INK           = "#0A0E14";
-const INK_MUTED     = "#4B5563";
 const INK_LIGHT     = "#6B7280";
 const BG            = "#FFFFFF";
 const BORDER        = "#E5E7EB";

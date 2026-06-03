@@ -41,7 +41,6 @@ const BG_SOFT       = "#F5F5F7";
 const BORDER        = "#E5E7EB";
 
 const SHADOW_CARD = "0 1px 2px rgba(15,18,23,0.06), 0 1px 3px rgba(15,18,23,0.06)";
-const SHADOW_LIFT = "0 6px 20px rgba(15,18,23,0.08), 0 2px 4px rgba(15,18,23,0.04)";
 
 export default function BusinessDashboardPage() {
   const [data, setData] = useState<ProfileData | null>(null);

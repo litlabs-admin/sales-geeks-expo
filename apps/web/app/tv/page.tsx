@@ -2,7 +2,6 @@ import Link from "next/link";
 import { EVENT_VIDEOS } from "./video/_catalog";
 
 const YLW       = "#FFD000";
-const YLW_TINT  = "#FFFBE5";
 const INK       = "#0A0E14";
 const INK_MUTED = "#4B5563";
 const INK_LIGHT = "#6B7280";

@@ -11,7 +11,6 @@ const INK_BODY  = "#1F2937";
 const INK_MUTED = "#4B5563";
 const INK_LIGHT = "#6B7280";
 const BG        = "#FFFFFF";
-const BORDER    = "#E5E7EB";
 const DISP      = "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif";
 
 export default async function TvLeaderboardPage({ searchParams }: { searchParams: { event?: string } }) {
@@ -33,7 +32,7 @@ export default async function TvLeaderboardPage({ searchParams }: { searchParams
           background: INK, border: `1px solid ${INK}`,
         }}>
           <span style={{ color: YLW, fontSize: 14, fontWeight: 800, letterSpacing: "0.12em" }}>
-            THAT'S A WRAP
+            THAT&apos;S A WRAP
           </span>
         </div>
       </header>

@@ -76,7 +76,7 @@ const TABS = [
   },
 ];
 
-export default function AttendeeNav({ slug, eventId }: { slug: string; eventId: string }) {
+export default function AttendeeNav({ slug }: { slug: string; eventId?: string }) {
   const pathname = usePathname();
 
   return (

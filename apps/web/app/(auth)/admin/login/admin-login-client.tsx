@@ -7,8 +7,6 @@ import { createBrowserSupabaseClient } from "@/lib/supabase-browser";
 /* ── Light theme palette ── */
 const YLW           = "#FFD000";
 const INK           = "#0A0E14";
-const INK_BODY      = "#1F2937";
-const INK_MUTED     = "#4B5563";
 const BG            = "#FFFFFF";
 const BORDER        = "#E5E7EB";
 const BORDER_STRONG = "#CBD5E1";
